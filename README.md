@@ -21,8 +21,6 @@ The pipeline demonstrates:
 
 ## System Architecture
 
-## MLOps Pipeline Architecture
-
 The project follows a modular, end-to-end Machine Learning pipeline:
 
 ```mermaid
@@ -30,21 +28,21 @@ graph LR
     %% Data Stage
     subgraph Data_Pipeline [1. Data Pipeline]
         Raw[Raw Excel Data] -->|data_loader.py| Merged[Merged Dataframe]
-        Merged -->|preprocessing.py| Clean[Cleaned Data\n(Outliers Removed)]
-        Clean -->|feature_engineering.py| Features[Selected Features\n(Correlation Filter)]
+        Merged -->|preprocessing.py| Clean["Cleaned Data<br>(Outliers Removed)"]
+        Clean -->|feature_engineering.py| Features["Selected Features<br>(Correlation Filter)"]
     end
 
     %% Training Stage
     subgraph Training_Pipeline [2. Model Training]
-        Features -->|train.py| Grid[GridSearchCV\n(5-Fold CV)]
-        Grid -->|Optimize| Best[Best Model\n(Decision Tree)]
-        Best -->|Save| Artifacts[Model Artifacts\n(.joblib)]
+        Features -->|train.py| Grid["GridSearchCV<br>(5-Fold CV)"]
+        Grid -->|Optimize| Best["Best Model<br>(Decision Tree)"]
+        Best -->|Save| Artifacts["Model Artifacts<br>(.joblib)"]
     end
 
     %% Serving Stage
     subgraph Deployment [3. Inference & Serving]
-        Artifacts -->|Load| API[FastAPI Backend\n(Render)]
-        API -->|Serve| UI[Streamlit Dashboard\n(Streamlit Cloud)]
+        Artifacts -->|Load| API["FastAPI Backend<br>(Render)"]
+        API -->|Serve| UI["Streamlit Dashboard<br>(Streamlit Cloud)"]
         User[End User] -->|Interact| UI
     end
 
