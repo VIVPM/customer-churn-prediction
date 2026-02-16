@@ -25,7 +25,7 @@ from src.eda import run_eda
 from src.preprocessing import preprocess_data
 from src.feature_engineering import run_feature_engineering
 from src.train import train_models
-from src.evaluate import run_evaluation
+from src.evaluate import evaluate_models
 from src.predict import interactive_prediction
 
 
@@ -54,7 +54,7 @@ def run_full_pipeline():
     train_models()
     
     print("\n[5/5] Evaluating Models...")
-    run_evaluation()
+    evaluate_models()
     
     print("\n" + "=" * 60)
     print("  PIPELINE COMPLETE!")
@@ -107,30 +107,29 @@ Examples:
         run_full_pipeline()
         return
     
-    # Run specific steps
+    # Run specific steps (multiple flags can be combined)
     if args.all:
         run_full_pipeline()
-    elif args.eda:
-        print_banner()
+        return
+    
+    print_banner()
+    
+    if args.eda:
         print("\nRunning EDA...")
         run_eda()
-    elif args.preprocess:
-        print_banner()
+    if args.preprocess:
         print("\nRunning Preprocessing...")
         preprocess_data()
-    elif args.features:
-        print_banner()
+    if args.features:
         print("\nRunning Feature Engineering...")
         run_feature_engineering()
-    elif args.train:
-        print_banner()
+    if args.train:
         print("\nTraining Models...")
         train_models()
-    elif args.evaluate:
-        print_banner()
+    if args.evaluate:
         print("\nEvaluating Models...")
-        run_evaluation()
-    elif args.predict:
+        evaluate_models()
+    if args.predict:
         interactive_prediction()
 
 

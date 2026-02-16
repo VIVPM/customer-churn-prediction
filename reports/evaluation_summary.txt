@@ -1,0 +1,15 @@
+Best Model: decision_tree
+==================================================
+Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.98      0.98      0.98      1092
+           1       0.92      0.94      0.93       271
+
+    accuracy                           0.97      1363
+   macro avg       0.95      0.96      0.96      1363
+weighted avg       0.97      0.97      0.97      1363
+
+Confusion Matrix:
+[[1071   21]
+ [  17  254]]

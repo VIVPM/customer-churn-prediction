@@ -12,8 +12,8 @@ env/
 data/raw/
 data/processed/
 
-# Model files
-models/*.joblib
+# Model files (uncomment below to exclude from git)
+# models/*.joblib
 
 # IDE
 .idea/

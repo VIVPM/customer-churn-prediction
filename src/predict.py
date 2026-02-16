@@ -11,24 +11,36 @@ Makes churn predictions for new customers:
 import pandas as pd
 import numpy as np
 import sys
-sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import MODELS_DIR, DATA_PROCESSED
 from src.utils import load_model, load_dataframe
 
 
 def load_prediction_artifacts():
-    """Load model and feature information for prediction."""
-    # Load best model (XGBoost by default, fall back to random_forest)
-    model_path = MODELS_DIR / "xgboost.joblib"
-    if not model_path.exists():
-        model_path = MODELS_DIR / "random_forest.joblib"
-    
+    """Load model, scaler, and feature information for prediction."""
+    # Load best model
+    model_path = MODELS_DIR / "best_model.joblib"
     if not model_path.exists():
         raise FileNotFoundError("No trained model found. Run train.py first.")
     
     model = load_model(model_path)
-    print(f"Loaded model: {model_path.name}")
+    
+    # Load scaler
+    scaler_path = MODELS_DIR / "scaler.joblib"
+    if not scaler_path.exists():
+        raise FileNotFoundError("No scaler found. Run train.py first.")
+    
+    scaler = load_model(scaler_path)
+    
+    # Load model name
+    model_name = "unknown"
+    name_file = MODELS_DIR / 'best_model_name.txt'
+    if name_file.exists():
+        model_name = name_file.read_text().strip()
+    
+    print(f"Loaded model: {model_name}")
     
     # Load feature names
     try:
@@ -38,7 +50,7 @@ def load_prediction_artifacts():
     
     feature_names = features_df['feature'].tolist()
     
-    return model, feature_names
+    return model, scaler, feature_names
 
 
 def get_risk_level(probability):
@@ -69,7 +81,7 @@ def predict_single(customer_data: dict):
     Returns:
         dict: Prediction results including probability and risk level
     """
-    model, feature_names = load_prediction_artifacts()
+    model, scaler, feature_names = load_prediction_artifacts()
     
     # Create DataFrame from input
     df = pd.DataFrame([customer_data])
@@ -82,9 +94,17 @@ def predict_single(customer_data: dict):
     # Reorder columns to match training data
     df = df[feature_names]
     
+    # Scale features
+    df_scaled = scaler.transform(df)
+    
     # Make prediction
-    prob = model.predict_proba(df)[0][1]
-    pred = int(prob >= 0.5)
+    if hasattr(model, 'predict_proba'):
+        prob = model.predict_proba(df_scaled)[0][1]
+        pred = int(prob >= 0.5)
+    else:
+        pred = int(model.predict(df_scaled)[0])
+        prob = float(pred)
+    
     risk_level = get_risk_level(prob)
     
     return {
@@ -125,7 +145,7 @@ def predict_batch(filepath: str, output_filepath: str = None):
     Returns:
         pd.DataFrame: DataFrame with predictions
     """
-    model, feature_names = load_prediction_artifacts()
+    model, scaler, feature_names = load_prediction_artifacts()
     
     # Load data
     df = pd.read_csv(filepath)
@@ -142,9 +162,16 @@ def predict_batch(filepath: str, output_filepath: str = None):
     # Select and reorder features
     X = df[feature_names]
     
+    # Scale features
+    X_scaled = scaler.transform(X)
+    
     # Make predictions
-    probs = model.predict_proba(X)[:, 1]
-    preds = (probs >= 0.5).astype(int)
+    if hasattr(model, 'predict_proba'):
+        probs = model.predict_proba(X_scaled)[:, 1]
+        preds = (probs >= 0.5).astype(int)
+    else:
+        preds = model.predict(X_scaled).astype(int)
+        probs = preds.astype(float)
     
     # Add predictions to dataframe
     df['churn_probability'] = probs.round(4)

@@ -1,214 +1,190 @@
 """
 Model Training Module
+=====================
+Trains multiple classification models using GridSearchCV with
+StandardScaler, matching the Part 2 notebook approach.
 
-Trains multiple machine learning models for churn prediction:
-- Logistic Regression
-- Random Forest
-- Gradient Boosting
-- XGBoost
-
-Handles class imbalance using SMOTE and class weights.
+Models: SVM, Random Forest, Logistic Regression, Decision Tree
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import cross_val_score
-from imblearn.over_sampling import SMOTE
 import sys
-sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-try:
-    from xgboost import XGBClassifier
-    XGBOOST_AVAILABLE = True
-except ImportError:
-    XGBOOST_AVAILABLE = False
-    print("Warning: XGBoost not installed. Skipping XGBoost model.")
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
 
-from config import DATA_PROCESSED, MODELS_DIR, RANDOM_STATE
+from config import DATA_PROCESSED, MODELS_DIR, TARGET_COLUMN, TEST_SIZE, RANDOM_STATE
 from src.utils import save_model, load_dataframe, create_directories, print_separator
 
 
+# Model configurations with hyperparameter grids (matching notebook)
+MODEL_PARAMS = {
+    'svm': {
+        'model': SVC(gamma='auto'),
+        'params': {
+            'C': [1, 10, 20],
+            'kernel': ['rbf', 'linear']
+        }
+    },
+    'random_forest': {
+        'model': RandomForestClassifier(),
+        'params': {
+            'n_estimators': [50, 60, 70, 80, 90, 100]
+        }
+    },
+    'logistic_regression': {
+        'model': LogisticRegression(solver='liblinear'),
+        'params': {
+            'C': [1, 5, 10],
+        }
+    },
+    'decision_tree': {
+        'model': DecisionTreeClassifier(),
+        'params': {
+            'criterion': ['gini', 'entropy']
+        }
+    }
+}
+
+
 def load_training_data():
-    """Load processed training data."""
-    # Try to load selected features first, fall back to full features
-    try:
-        X_train = load_dataframe(DATA_PROCESSED / "X_train_selected.csv")
-        print("Loaded selected features.")
-    except FileNotFoundError:
-        X_train = load_dataframe(DATA_PROCESSED / "X_train.csv")
-        print("Loaded full features.")
-    
-    y_train = load_dataframe(DATA_PROCESSED / "y_train.csv").values.ravel()
-    
+    """Load preprocessed training data (feature-selected if available)."""
+    print_separator("LOADING TRAINING DATA")
+
+    # Prefer feature-selected data, fall back to raw processed
+    X_train_path = DATA_PROCESSED / 'X_train_selected.csv'
+    if not X_train_path.exists():
+        X_train_path = DATA_PROCESSED / 'X_train.csv'
+        print("Note: Using pre-selection features (run feature engineering first for best results)")
+
+    X_train = load_dataframe(X_train_path)
+    y_train = load_dataframe(DATA_PROCESSED / 'y_train.csv').values.ravel()
+
+    print(f"X_train shape: {X_train.shape}")
+    print(f"y_train shape: {y_train.shape}")
+    print(f"Class distribution: {pd.Series(y_train).value_counts().to_dict()}")
+
     return X_train, y_train
 
 
-def get_models():
+def scale_features(X_train):
+    """Apply StandardScaler to features (matching notebook cell 11)."""
+    print_separator("FEATURE SCALING")
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+
+    print(f"Scaled training data shape: {X_train_scaled.shape}")
+
+    return X_train_scaled, scaler
+
+
+def run_gridsearch(X_train_scaled, y_train):
     """
-    Get dictionary of models to train.
-    
-    Returns:
-        dict: Model name -> model instance
+    Run GridSearchCV for all models (matching notebook cells 12-13).
+    Returns list of score dicts and trained GridSearchCV objects.
     """
-    models = {
-        'logistic_regression': LogisticRegression(
-            class_weight='balanced',
-            max_iter=1000,
-            random_state=RANDOM_STATE,
-            solver='lbfgs'
-        ),
-        'random_forest': RandomForestClassifier(
-            n_estimators=100,
-            class_weight='balanced',
-            random_state=RANDOM_STATE,
-            n_jobs=-1
-        ),
-        'gradient_boosting': GradientBoostingClassifier(
-            n_estimators=100,
-            random_state=RANDOM_STATE,
-            max_depth=5
+    print_separator("GRIDSEARCH HYPERPARAMETER TUNING")
+
+    scores = []
+    grid_searches = {}
+
+    for model_name, mp in MODEL_PARAMS.items():
+        print(f"\nTraining {model_name}...")
+        clf = GridSearchCV(
+            mp['model'],
+            mp['params'],
+            cv=5,
+            return_train_score=False
         )
-    }
-    
-    if XGBOOST_AVAILABLE:
-        models['xgboost'] = XGBClassifier(
-            n_estimators=100,
-            scale_pos_weight=3,
-            random_state=RANDOM_STATE,
-            use_label_encoder=False,
-            eval_metric='logloss',
-            verbosity=0
-        )
-    
-    return models
+        clf.fit(X_train_scaled, y_train)
+
+        scores.append({
+            'model': model_name,
+            'best_score': clf.best_score_,
+            'best_params': clf.best_params_
+        })
+        grid_searches[model_name] = clf
+
+        print(f"  Best Score: {clf.best_score_:.4f}")
+        print(f"  Best Params: {clf.best_params_}")
+
+    return scores, grid_searches
 
 
-def apply_smote(X_train, y_train):
+def select_best_model(scores, X_train_scaled, y_train):
     """
-    Apply SMOTE to handle class imbalance.
-    
-    Args:
-        X_train: Training features
-        y_train: Training labels
-        
-    Returns:
-        tuple: (X_balanced, y_balanced)
+    Select and retrain the best model (matching notebook cell 15).
+    Returns the trained best model.
     """
-    print("Applying SMOTE for class balancing...")
-    print(f"Original class distribution: {np.bincount(y_train.astype(int))}")
-    
-    smote = SMOTE(random_state=RANDOM_STATE)
-    X_balanced, y_balanced = smote.fit_resample(X_train, y_train)
-    
-    print(f"Balanced class distribution: {np.bincount(y_balanced.astype(int))}")
-    print(f"Samples after SMOTE: {len(X_balanced)}")
-    
-    return X_balanced, y_balanced
+    print_separator("MODEL COMPARISON")
 
+    # Display scores as DataFrame (matching notebook cell 14)
+    scores_df = pd.DataFrame(scores, columns=['model', 'best_score', 'best_params'])
+    print(scores_df.to_string(index=True))
 
-def train_single_model(model, X_train, y_train, model_name):
-    """
-    Train a single model with cross-validation.
-    
-    Args:
-        model: Model instance
-        X_train: Training features
-        y_train: Training labels
-        model_name: Name of the model
-        
-    Returns:
-        dict: Training results
-    """
-    print(f"\nTraining {model_name}...")
-    
-    # Cross-validation scores
-    cv_scores_f1 = cross_val_score(model, X_train, y_train, cv=5, scoring='f1')
-    cv_scores_accuracy = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy')
-    cv_scores_roc_auc = cross_val_score(model, X_train, y_train, cv=5, scoring='roc_auc')
-    
-    # Fit the model
-    model.fit(X_train, y_train)
-    
-    results = {
-        'model': model,
-        'cv_f1_mean': cv_scores_f1.mean(),
-        'cv_f1_std': cv_scores_f1.std(),
-        'cv_accuracy_mean': cv_scores_accuracy.mean(),
-        'cv_accuracy_std': cv_scores_accuracy.std(),
-        'cv_roc_auc_mean': cv_scores_roc_auc.mean(),
-        'cv_roc_auc_std': cv_scores_roc_auc.std()
-    }
-    
-    print(f"  CV Accuracy: {cv_scores_accuracy.mean():.4f} (+/- {cv_scores_accuracy.std():.4f})")
-    print(f"  CV F1 Score: {cv_scores_f1.mean():.4f} (+/- {cv_scores_f1.std():.4f})")
-    print(f"  CV ROC-AUC:  {cv_scores_roc_auc.mean():.4f} (+/- {cv_scores_roc_auc.std():.4f})")
-    
-    return results
+    # Find best model
+    best_model_info = max(scores, key=lambda x: x['best_score'])
+    best_model_name = best_model_info['model']
+    best_params = best_model_info['best_params']
+
+    print(f"\n{'='*40}")
+    print(f"Best Model: {best_model_name}")
+    print(f"Best CV Score: {best_model_info['best_score']:.4f}")
+    print(f"Best Params: {best_params}")
+    print(f"{'='*40}")
+
+    # Retrain best model with best params
+    best_model = MODEL_PARAMS[best_model_name]['model']
+    best_model.set_params(**best_params)
+    best_model.fit(X_train_scaled, y_train)
+
+    return best_model, best_model_name, scores_df
 
 
 def train_models():
-    """
-    Train all models and save them.
-    
-    Returns:
-        dict: Results for all models
-    """
+    """Run the complete training pipeline."""
     create_directories(MODELS_DIR)
-    
-    # Load training data
-    print_separator("LOADING TRAINING DATA")
+
+    # Load data
     X_train, y_train = load_training_data()
-    print(f"Training data shape: {X_train.shape}")
-    print(f"Target distribution: {np.bincount(y_train.astype(int))}")
-    
-    # Apply SMOTE
-    print_separator("HANDLING CLASS IMBALANCE")
-    X_train_balanced, y_train_balanced = apply_smote(X_train, y_train)
-    
-    # Get models
-    models = get_models()
-    
-    # Train all models
-    print_separator("TRAINING MODELS")
-    results = {}
-    
-    for name, model in models.items():
-        results[name] = train_single_model(
-            model, X_train_balanced, y_train_balanced, name
-        )
-        
-        # Save model
-        save_model(model, MODELS_DIR / f"{name}.joblib")
-    
-    # Find best model
-    print_separator("MODEL COMPARISON")
-    
-    comparison_df = pd.DataFrame({
-        name: {
-            'CV Accuracy': f"{r['cv_accuracy_mean']:.4f} (+/- {r['cv_accuracy_std']:.4f})",
-            'CV F1': f"{r['cv_f1_mean']:.4f} (+/- {r['cv_f1_std']:.4f})",
-            'CV ROC-AUC': f"{r['cv_roc_auc_mean']:.4f} (+/- {r['cv_roc_auc_std']:.4f})"
-        }
-        for name, r in results.items()
-    }).T
-    
-    print(comparison_df)
-    
-    # Save comparison
-    comparison_df.to_csv(MODELS_DIR / "cv_comparison.csv")
-    print(f"\nSaved CV comparison to: {MODELS_DIR / 'cv_comparison.csv'}")
-    
-    # Identify best model
-    best_name = max(results, key=lambda x: results[x]['cv_f1_mean'])
-    print(f"\nBest model (by F1): {best_name}")
-    print(f"  F1 Score: {results[best_name]['cv_f1_mean']:.4f}")
-    
+
+    # Scale features
+    X_train_scaled, scaler = scale_features(X_train)
+
+    # Run GridSearchCV
+    scores, grid_searches = run_gridsearch(X_train_scaled, y_train)
+
+    # Select best model
+    best_model, best_model_name, scores_df = select_best_model(
+        scores, X_train_scaled, y_train
+    )
+
+    # Save artifacts
+    print_separator("SAVING MODELS")
+    save_model(scaler, MODELS_DIR / 'scaler.joblib')
+    save_model(best_model, MODELS_DIR / 'best_model.joblib')
+    scores_df.to_csv(MODELS_DIR / 'model_comparison.csv', index=False)
+
+    # Save model name for evaluate.py
+    with open(MODELS_DIR / 'best_model_name.txt', 'w') as f:
+        f.write(best_model_name)
+
+    print(f"Saved scaler to: {MODELS_DIR / 'scaler.joblib'}")
+    print(f"Saved best model ({best_model_name}) to: {MODELS_DIR / 'best_model.joblib'}")
+    print(f"Saved comparison to: {MODELS_DIR / 'model_comparison.csv'}")
+
     print_separator("TRAINING COMPLETE")
-    
-    return results
+
+    return best_model, scaler, scores_df
 
 
 if __name__ == "__main__":
-    results = train_models()
+    train_models()

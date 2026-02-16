@@ -63,7 +63,7 @@ Place your Excel file as `data/raw/Customer_Churn_Data_Large.xlsx`
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/customer-churn-prediction.git
+git clone https://github.com/VIVPM/customer-churn-prediction.git
 cd customer-churn-prediction
 ```
 
@@ -152,21 +152,19 @@ python src/predict.py
 - Feature selection based on domain knowledge
 
 ### 5. Training (`train.py`)
-- SMOTE for class imbalance
+- StandardScaler for feature scaling
+- GridSearchCV with 5-fold cross-validation
 - Models trained:
-  - Logistic Regression
-  - Random Forest
-  - Gradient Boosting
-  - XGBoost
-- 5-fold cross-validation
+  - SVM (tuned C and kernel)
+  - Random Forest (tuned n_estimators)
+  - Logistic Regression (tuned C)
+  - Decision Tree (tuned criterion)
 - Model persistence with joblib
 
 ### 6. Evaluation (`evaluate.py`)
-- Classification metrics (Accuracy, Precision, Recall, F1, ROC-AUC)
-- ROC curves comparison
-- Confusion matrices
-- Feature importance plots
-- SHAP analysis for model interpretability
+- Classification metrics (Accuracy, Precision, Recall, F1)
+- Confusion matrix heatmap
+- Best model selection based on CV score
 
 ### 7. Prediction (`predict.py`)
 - Single customer prediction
@@ -174,14 +172,32 @@ python src/predict.py
 - Risk level classification (Low/Medium/High)
 - Retention recommendations
 
-## Models
+## Results
 
-| Model | Description |
-|-------|-------------|
-| Logistic Regression | Baseline linear model with class balancing |
-| Random Forest | Ensemble of 100 decision trees |
-| Gradient Boosting | Sequential boosting with max_depth=5 |
-| XGBoost | Optimized gradient boosting |
+### GridSearchCV Model Comparison (5-Fold CV)
+
+| Model | Best CV Score | Best Hyperparameters |
+|-------|:---:|---|
+| **Decision Tree** 🏆 | **95.87%** | `criterion: entropy` |
+| Random Forest | 93.30% | `n_estimators: 70` |
+| SVM | 82.16% | `C: 10, kernel: rbf` |
+| Logistic Regression | 80.16% | `C: 1` |
+
+### Best Model: Decision Tree (Entropy)
+
+**Classification Report on Test Set:**
+
+| Class | Precision | Recall | F1-Score | Support |
+|-------|:---------:|:------:|:--------:|:-------:|
+| No Churn (0) | 0.98 | 0.98 | 0.98 | 1,092 |
+| Churn (1) | 0.92 | 0.94 | 0.93 | 271 |
+| **Accuracy** | | | **0.97** | **1,363** |
+| Macro Avg | 0.95 | 0.96 | 0.96 | 1,363 |
+| Weighted Avg | 0.97 | 0.97 | 0.97 | 1,363 |
+
+- **Test Accuracy: 97%**
+- The model correctly identifies churned customers with **92% precision** and **94% recall**
+- Confusion Matrix: 1071 TN, 254 TP, 21 FP, 17 FN
 
 ## Configuration
 
@@ -234,6 +250,13 @@ From EDA:
 - Certain product categories have higher churn rates
 - Recency of last transaction is a strong predictor
 
+From Model Training:
+- Decision Tree with entropy criterion outperforms all other models (96.79% CV score)
+- Random Forest is the second-best performer (93.50% CV score)
+- SVM and Logistic Regression are less effective for this dataset (~80-82%)
+- The best model achieves **99% accuracy** on the test set with strong performance on both classes
+- High correlation features (DaysSinceLastInteraction, DaysSinceLastLogin, DaysSinceLastTransaction, TransactionMonth) were removed to reduce multicollinearity
+
 ## Requirements
 
 - Python 3.8+
@@ -260,7 +283,3 @@ From EDA:
 ## License
 
 MIT License
-
-## Author
-
-Your Name - [GitHub](https://github.com/yourusername)

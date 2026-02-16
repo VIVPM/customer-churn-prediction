@@ -12,7 +12,8 @@ Based on the original notebook implementation (cells 57-59).
 import pandas as pd
 import numpy as np
 import sys
-sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (
     DATA_PROCESSED, CORRELATION_THRESHOLD, HIGH_CORRELATION_COLUMNS

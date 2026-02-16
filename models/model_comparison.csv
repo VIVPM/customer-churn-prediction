@@ -1,0 +1,5 @@
+model,best_score,best_params
+svm,0.8216193629371278,"{'C': 10, 'kernel': 'rbf'}"
+random_forest,0.9330130327461437,{'n_estimators': 70}
+logistic_regression,0.8016149821821215,{'C': 1}
+decision_tree,0.9587073402919941,{'criterion': 'entropy'}

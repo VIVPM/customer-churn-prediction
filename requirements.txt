@@ -1,10 +1,15 @@
+# Dependencies
 pandas
 numpy
 matplotlib
 seaborn
 scikit-learn
-xgboost
-imbalanced-learn
-shap
 openpyxl
 joblib
+
+# API & UI
+fastapi
+uvicorn
+streamlit
+requests
+python-multipart

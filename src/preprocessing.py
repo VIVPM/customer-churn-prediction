@@ -15,7 +15,8 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 import sys
-sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (
     DATA_PROCESSED, TARGET_COLUMN, ZSCORE_THRESHOLD,
@@ -81,6 +82,7 @@ def compute_zscores(df):
     """
     Compute z-scores for numerical columns.
     Based on notebook cell 27.
+    Skips columns with zero variance (std=0) to avoid NaN z-scores.
     """
     df = df.copy()
     
@@ -89,8 +91,12 @@ def compute_zscores(df):
     zscore_cols = []
     for col in ZSCORE_COLUMNS:
         if col in df.columns:
+            col_std = df[col].std()
+            if col_std == 0:
+                print(f"  Skipping {col} (zero variance)")
+                continue
             zscore_col = f'zscore{col}'
-            df[zscore_col] = (df[col] - df[col].mean()) / df[col].std()
+            df[zscore_col] = (df[col] - df[col].mean()) / col_std
             zscore_cols.append(zscore_col)
             print(f"  Computed z-score for: {col}")
     

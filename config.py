@@ -51,11 +51,13 @@ RANDOM_STATE = 42
 ZSCORE_COLUMNS = [
     'CustomerID', 'TransactionID', 'AmountSpent', 'InteractionID',
     'LoginFrequency', 'DaysSinceLastTransaction', 'DaysSinceLastInteraction',
-    'DaysSinceLastLogin', 'TransactionMonth'
+    'DaysSinceLastLogin', 'TransactionMonth', 'InteractionMonth',
+    'InteractionYear', 'LastLoginMonth'
 ]
 
 # Columns to drop after feature selection (high correlation)
 HIGH_CORRELATION_COLUMNS = [
     'DaysSinceLastInteraction', 'DaysSinceLastLogin',
-    'DaysSinceLastTransaction', 'TransactionMonth'
+    'DaysSinceLastTransaction', 'TransactionMonth',
+    'InteractionYear', 'LastLoginMonth'
 ]
