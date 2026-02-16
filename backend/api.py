@@ -3,8 +3,9 @@ FastAPI Backend for Churn Prediction
 =====================================
 Serves the trained model via REST API.
 
-Run: uvicorn api:app --reload --port 8000
-Docs: http://localhost:8000/docs
+Run locally:  uvicorn api:app --reload --port 8000
+Render:       auto-deploys via render.yaml
+Docs:         http://localhost:8000/docs
 """
 
 import pandas as pd
@@ -21,10 +22,11 @@ from typing import Optional
 from joblib import load
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths (relative to this file)
 # ---------------------------------------------------------------------------
-ROOT_DIR = Path(__file__).parent
-MODELS_DIR = ROOT_DIR / "models"
+BACKEND_DIR = Path(__file__).parent
+MODELS_DIR = BACKEND_DIR / "models"
+DATA_DIR = BACKEND_DIR / "data"
 
 # ---------------------------------------------------------------------------
 # Global model objects (loaded once at startup)
@@ -35,7 +37,6 @@ model_name = "unknown"
 feature_names = []
 
 # One-hot mapping: user-friendly value → which dummy columns to set to 1
-# (remaining dummies stay 0, which represents the "base" category)
 CATEGORY_ENCODINGS = {
     "ProductCategory": {
         "columns": [
@@ -44,7 +45,7 @@ CATEGORY_ENCODINGS = {
             "ProductCategory_Furniture",
             "ProductCategory_Groceries",
         ],
-        "base": "Books",  # not in dummies → all zeros
+        "base": "Books",
     },
     "InteractionType": {
         "columns": [
@@ -72,7 +73,6 @@ CATEGORY_ENCODINGS = {
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model artifacts once at startup."""
     global model, scaler, model_name, feature_names
 
     model = load(MODELS_DIR / "best_model.joblib")
@@ -82,13 +82,11 @@ async def lifespan(app: FastAPI):
     if name_file.exists():
         model_name = name_file.read_text().strip()
 
-    feat_file = ROOT_DIR / "data" / "processed" / "feature_names_selected.csv"
-    if not feat_file.exists():
-        feat_file = ROOT_DIR / "data" / "processed" / "feature_names.csv"
+    feat_file = DATA_DIR / "feature_names_selected.csv"
     feature_names = pd.read_csv(feat_file)["feature"].tolist()
 
     print(f"✅ Model loaded: {model_name} ({len(feature_names)} features)")
-    yield  # app runs
+    yield
     print("🛑 Shutting down")
 
 
@@ -111,10 +109,9 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Request / Response schemas
+# Schemas
 # ---------------------------------------------------------------------------
 class CustomerInput(BaseModel):
-    """User-friendly customer data (categorical fields as plain strings)."""
     CustomerID: int = Field(..., example=101)
     TransactionID: int = Field(..., example=5000)
     AmountSpent: float = Field(..., example=250.0)
@@ -143,13 +140,11 @@ class ModelInfo(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helper functions
+# Helpers
 # ---------------------------------------------------------------------------
 def _encode_customer(data: CustomerInput) -> pd.DataFrame:
-    """Convert user-friendly input into the 16-feature vector the model expects."""
     row = {feat: 0 for feat in feature_names}
 
-    # Numeric fields
     row["CustomerID"] = data.CustomerID
     row["TransactionID"] = data.TransactionID
     row["AmountSpent"] = data.AmountSpent
@@ -158,16 +153,13 @@ def _encode_customer(data: CustomerInput) -> pd.DataFrame:
     row["TransactionYear"] = data.TransactionYear
     row["InteractionMonth"] = data.InteractionMonth
 
-    # One-hot encode categoricals
     for cat_field, info in CATEGORY_ENCODINGS.items():
         value = getattr(data, cat_field)
         for col in info["columns"]:
-            # col looks like "ProductCategory_Electronics"
             if col.endswith(f"_{value}"):
                 row[col] = 1
 
-    df = pd.DataFrame([row])[feature_names]
-    return df
+    return pd.DataFrame([row])[feature_names]
 
 
 def _get_risk_level(prob: float) -> str:
@@ -179,16 +171,14 @@ def _get_risk_level(prob: float) -> str:
 
 
 def _get_recommendation(risk: str) -> str:
-    recs = {
+    return {
         "High": "⚠️ Immediate action required! Contact customer with special retention offer.",
         "Medium": "📋 Monitor closely. Consider proactive engagement and loyalty rewards.",
         "Low": "✅ Low risk. Continue regular engagement and satisfaction monitoring.",
-    }
-    return recs.get(risk, "")
+    }.get(risk, "")
 
 
 def _predict_single(df: pd.DataFrame) -> PredictionResult:
-    """Run model prediction on a single-row DataFrame."""
     scaled = scaler.transform(df)
 
     if hasattr(model, "predict_proba"):
@@ -210,6 +200,11 @@ def _predict_single(df: pd.DataFrame) -> PredictionResult:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+@app.get("/")
+async def root():
+    return {"status": "running", "model": model_name, "docs": "/docs"}
+
+
 @app.post("/predict", response_model=PredictionResult)
 async def predict(customer: CustomerInput):
     """Predict churn for a single customer."""
@@ -219,12 +214,7 @@ async def predict(customer: CustomerInput):
 
 @app.post("/predict/batch")
 async def predict_batch(file: UploadFile = File(...)):
-    """Predict churn for multiple customers from a CSV file.
-
-    The CSV should have columns: CustomerID, TransactionID, AmountSpent,
-    InteractionID, LoginFrequency, TransactionYear, InteractionMonth,
-    ProductCategory, InteractionType, ResolutionStatus, ServiceUsage
-    """
+    """Predict churn for multiple customers from CSV upload."""
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
 

@@ -1,0 +1,17 @@
+feature
+CustomerID
+TransactionID
+AmountSpent
+InteractionID
+LoginFrequency
+TransactionYear
+InteractionMonth
+ProductCategory_Clothing
+ProductCategory_Electronics
+ProductCategory_Furniture
+ProductCategory_Groceries
+InteractionType_Feedback
+InteractionType_Inquiry
+ResolutionStatus_Unresolved
+ServiceUsage_Online Banking
+ServiceUsage_Website

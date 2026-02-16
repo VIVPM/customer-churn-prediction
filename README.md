@@ -19,10 +19,51 @@ The pipeline demonstrates:
 - SHAP-based model explainability
 - Production-ready prediction pipeline
 
+## System Architecture
+
+## MLOps Pipeline Architecture
+
+The project follows a modular, end-to-end Machine Learning pipeline:
+
+```mermaid
+graph LR
+    %% Data Stage
+    subgraph Data_Pipeline [1. Data Pipeline]
+        Raw[Raw Excel Data] -->|data_loader.py| Merged[Merged Dataframe]
+        Merged -->|preprocessing.py| Clean[Cleaned Data\n(Outliers Removed)]
+        Clean -->|feature_engineering.py| Features[Selected Features\n(Correlation Filter)]
+    end
+
+    %% Training Stage
+    subgraph Training_Pipeline [2. Model Training]
+        Features -->|train.py| Grid[GridSearchCV\n(5-Fold CV)]
+        Grid -->|Optimize| Best[Best Model\n(Decision Tree)]
+        Best -->|Save| Artifacts[Model Artifacts\n(.joblib)]
+    end
+
+    %% Serving Stage
+    subgraph Deployment [3. Inference & Serving]
+        Artifacts -->|Load| API[FastAPI Backend\n(Render)]
+        API -->|Serve| UI[Streamlit Dashboard\n(Streamlit Cloud)]
+        User[End User] -->|Interact| UI
+    end
+
+    %% Styling
+    style Data_Pipeline fill:#e1f5fe,stroke:#01579b
+    style Training_Pipeline fill:#fff3e0,stroke:#e65100
+    style Deployment fill:#e8f5e9,stroke:#1b5e20
+```
+
 ## Project Structure
 
 ```
 customer-churn-prediction/
+├── backend/                 # FastAPI Backend (deployable to Render)
+│   ├── api.py               # API endpoints
+│   ├── requirements.txt     # API dependencies
+│   ├── render.yaml          # Render deployment config
+│   ├── models/              # Model artifacts (copied for deployment)
+│   └── data/                # Feature names (copied for deployment)
 ├── data/
 │   ├── raw/                 # Place your Excel file here
 │   └── processed/           # Generated train/test splits
@@ -40,8 +81,9 @@ customer-churn-prediction/
 │   ├── predict.py           # Make predictions
 │   └── utils.py             # Helper functions
 ├── main.py                  # Pipeline runner
+├── streamlit_app.py         # Streamlit UI (Frontend)
 ├── config.py                # Configuration settings
-├── requirements.txt
+├── requirements.txt         # Project dependencies
 ├── .gitignore
 └── README.md
 ```
@@ -82,7 +124,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Run Complete Pipeline
+### 1. Run Complete ML Pipeline
 
 ```bash
 python main.py --all
@@ -90,7 +132,24 @@ python main.py --all
 
 This runs: EDA → Preprocessing → Feature Engineering → Training → Evaluation
 
-### Run Individual Steps
+### 2. Run Web UI (Streamlit + FastAPI)
+
+You need to run **two terminals** to use the web interface.
+
+**Terminal 1: Start Backend API**
+```bash
+cd backend
+uvicorn api:app --reload --port 8000
+```
+
+**Terminal 2: Start Frontend UI**
+```bash
+streamlit run streamlit_app.py
+```
+
+Then open **http://localhost:8501** in your browser.
+
+### 3. Run Individual Steps
 
 ```bash
 # Exploratory Data Analysis
