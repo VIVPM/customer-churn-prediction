@@ -31,3 +31,6 @@ Thumbs.db
 # Reports (regenerate with pipeline)
 reports/figures/
 reports/*.csv
+
+# Streamlit secrets
+.streamlit/
