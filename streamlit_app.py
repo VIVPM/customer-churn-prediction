@@ -86,9 +86,9 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 def check_api():
     try:
-        r = requests.get(f"{API_URL}/model/info", timeout=3)
+        r = requests.get(f"{API_URL}/model/info", timeout=15)  # 15s for Render cold start
         return r.status_code == 200
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         return False
 
 
