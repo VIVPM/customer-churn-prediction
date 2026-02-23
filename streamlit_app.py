@@ -4,7 +4,7 @@ Streamlit UI for Churn Prediction
 Frontend that talks to the FastAPI backend.
 
 Run:
-  1. Start API:  uvicorn api:app --reload --port 8000
+  1. Start API:  cd backend && uvicorn api:app --reload --port 8000
   2. Start UI:   streamlit run streamlit_app.py
 """
 
@@ -12,15 +12,16 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
+import time
 
 # ---------------------------------------------------------------------------
 # Config — reads from Streamlit secrets (deployed) or defaults to localhost
 # ---------------------------------------------------------------------------
-API_URL = os.environ.get("API_URL", "http://localhost:8000")
+API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
 try:
-    API_URL = st.secrets["API_URL"]
+    API_URL = st.secrets["API_URL"].rstrip("/")
 except (FileNotFoundError, KeyError):
-    pass  # use env var or default
+    pass
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -33,7 +34,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Clean light CSS
+# CSS
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
@@ -77,6 +78,37 @@ st.markdown("""
         padding: 20px;
         margin: 16px 0;
     }
+
+    /* Training status cards */
+    .status-running {
+        background: #0d6efd;
+        border: 2px solid #0a58ca;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 12px 0;
+        color: white;
+    }
+    .status-completed {
+        background: #157347;
+        border: 2px solid #0f5132;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 12px 0;
+        color: white;
+    }
+    .status-failed {
+        background: #b02a37;
+        border: 2px solid #842029;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 12px 0;
+        color: white;
+    }
+
+    /* Step indicators */
+    .step-done   { color: #28a745; font-weight: 600; }
+    .step-active { color: #fd7e14; font-weight: 600; }
+    .step-wait   { color: #adb5bd; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,10 +118,20 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 def check_api():
     try:
-        r = requests.get(f"{API_URL}/model/info", timeout=15)  # 15s for Render cold start
-        return r.status_code == 200
+        r = requests.get(f"{API_URL}/", timeout=15)
+        return r.status_code == 200, r.json()
     except (requests.ConnectionError, requests.Timeout):
-        return False
+        return False, {}
+
+
+def get_model_info():
+    try:
+        r = requests.get(f"{API_URL}/model/info", timeout=10)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -99,20 +141,25 @@ with st.sidebar:
     st.markdown("## 🔮 Churn Predictor")
     st.markdown("---")
 
-    api_ok = check_api()
+    api_ok, root_data = check_api()
+    model_loaded = root_data.get("model_loaded", False)
+
     if api_ok:
         st.success("✅ API Connected")
-        info = requests.get(f"{API_URL}/model/info").json()
-        st.markdown(f"**Model:** `{info['model_name']}`")
-        st.markdown(f"**Features:** `{info['num_features']}`")
+        info = get_model_info()
+        if info:
+            st.markdown(f"**Model:** `{info['model_name']}`")
+            st.markdown(f"**Features:** `{info['num_features']}`")
+        else:
+            st.warning("⚠️ Model not loaded yet — train first")
     else:
         st.error("❌ API Offline")
-        st.code("uvicorn api:app --reload", language="bash")
+        st.code("cd backend && uvicorn api:app --reload", language="bash")
 
     st.markdown("---")
     st.markdown("### How to use")
     st.markdown("""
-    1. Start the FastAPI backend
+    1. **Train Model** — upload Excel data
     2. **Single Prediction** — fill form
     3. **Batch Prediction** — upload CSV
     """)
@@ -127,15 +174,165 @@ st.markdown("---")
 
 
 # ---------------------------------------------------------------------------
-# Tabs (2 tabs only)
+# Tabs
 # ---------------------------------------------------------------------------
-tab1, tab2 = st.tabs(["🎯 Single Prediction", "📊 Batch Prediction"])
+tab_train, tab1, tab2 = st.tabs([
+    "🏋️ Train Model",
+    "🎯 Single Prediction",
+    "📊 Batch Prediction",
+])
 
 
-# ======================== TAB 1: Single Prediction ========================
+# ======================== TAB 0: Train Model ================================
+with tab_train:
+    st.subheader("🏋️ Retrain the Prediction Model")
+    st.markdown("""
+    Upload the raw Excel data file to retrain the model from scratch.
+    The pipeline runs:
+    - **Step 1** — Data Preprocessing (missing values, outlier removal, encoding)
+    - **Step 2** — Feature Engineering (correlation analysis, feature selection)
+    - **Step 3** — Model Training (GridSearchCV across SVM, Random Forest, Logistic Regression, Decision Tree)
+    """)
+
+    if not api_ok:
+        st.warning("⚠️ Start the FastAPI backend to use training.")
+    else:
+        st.markdown("#### 📁 Upload Training Data")
+        st.info("Upload your `Customer_Churn_Data_Large.xlsx` file (multi-sheet Excel)")
+
+        uploaded_excel = st.file_uploader(
+            "Choose Excel file (.xlsx)",
+            type=["xlsx", "xls"],
+            key="train_upload"
+        )
+
+        col_btn, col_status = st.columns([1, 2])
+
+        with col_btn:
+            train_btn = st.button(
+                "🚀 Start Training",
+                use_container_width=True,
+                type="primary",
+                disabled=(uploaded_excel is None),
+            )
+
+        if train_btn and uploaded_excel is not None:
+            with st.spinner("Uploading data and starting training..."):
+                resp = requests.post(
+                    f"{API_URL}/train",
+                    files={"file": (uploaded_excel.name, uploaded_excel.getvalue(),
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                    timeout=30,
+                )
+            if resp.status_code == 200:
+                st.success("✅ Training started! Monitor progress below.")
+                st.session_state["training_triggered"] = True
+            elif resp.status_code == 409:
+                st.warning("⚠️ Training already in progress.")
+                st.session_state["training_triggered"] = True
+            else:
+                st.error(f"❌ Failed to start training: {resp.text}")
+
+        # ── Training Status Panel ──────────────────────────────────────────
+        if not st.session_state.get("training_triggered", False):
+            st.info("📂 Upload your Excel file and click **Start Training** to begin.")
+        else:
+            st.markdown("---")
+            st.markdown("#### 📊 Training Status")
+
+        status_placeholder = st.empty()
+        steps_placeholder = st.empty()
+        metrics_placeholder = st.empty()
+        refresh_placeholder = st.empty()
+
+        def render_status():
+            if not st.session_state.get("training_triggered", False):
+                return None
+            try:
+                r = requests.get(f"{API_URL}/train/status", timeout=10)
+                if r.status_code != 200:
+                    return None
+                s = r.json()
+            except Exception:
+                return None
+
+            status = s.get("status", "idle")
+            message = s.get("message", "")
+
+            if status == "idle":
+                status_placeholder.info("💤 No training has been run yet. Upload data and click **Start Training**.")
+
+            elif status == "running":
+                status_placeholder.markdown(
+                    f'<div class="status-running">🔄 <strong>Training in Progress</strong><br>{message}</div>',
+                    unsafe_allow_html=True
+                )
+                # Step indicators based on message
+                msg_lower = message.lower()
+                step1 = "✅" if "step 2" in msg_lower or "step 3" in msg_lower or "complete" in msg_lower else (
+                    "🔄" if "step 1" in msg_lower else "⏳")
+                step2 = "✅" if "step 3" in msg_lower or "complete" in msg_lower else (
+                    "🔄" if "step 2" in msg_lower else "⏳")
+                step3 = "✅" if "complete" in msg_lower else (
+                    "🔄" if "step 3" in msg_lower else "⏳")
+
+                steps_placeholder.markdown(f"""
+                | Step | Task | Status |
+                |------|------|--------|
+                | 1 | Data Preprocessing | {step1} |
+                | 2 | Feature Engineering | {step2} |
+                | 3 | Model Training (GridSearchCV) | {step3} |
+                """)
+
+            elif status == "completed":
+                status_placeholder.markdown(
+                    f'<div class="status-completed">✅ <strong>Training Complete!</strong><br>{message}</div>',
+                    unsafe_allow_html=True
+                )
+                steps_placeholder.markdown("""
+                | Step | Task | Status |
+                |------|------|--------|
+                | 1 | Data Preprocessing | ✅ |
+                | 2 | Feature Engineering | ✅ |
+                | 3 | Model Training (GridSearchCV) | ✅ |
+                """)
+                m1, m2, m3 = metrics_placeholder.columns(3)
+                m1.metric("🏆 Best Model", s.get("model_name", "-"))
+                cv = s.get("best_cv_score")
+                m2.metric("📈 CV Score", f"{cv:.4f}" if cv else "-")
+                m3.metric("🔢 Features Used", s.get("num_features", "-"))
+
+            elif status == "failed":
+                status_placeholder.markdown(
+                    f'<div class="status-failed">❌ <strong>Training Failed</strong><br>{message}</div>',
+                    unsafe_allow_html=True
+                )
+                if s.get("error"):
+                    with st.expander("🔍 Error Details"):
+                        st.code(s["error"], language="python")
+
+            return status
+
+        # Manual refresh only — no auto-rerun
+        current_status = render_status()
+
+        if current_status == "running":
+            refresh_placeholder.markdown("*⏳ Training running in background — click Refresh to check progress.*")
+            if st.button("🔄 Refresh Status"):
+                st.rerun()
+        else:
+            refresh_placeholder.empty()
+            if current_status in ("completed", "failed"):
+                if st.button("🔄 Refresh Status"):
+                    st.rerun()
+
+
+# ======================== TAB 1: Single Prediction ==========================
 with tab1:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
+    elif not model_loaded:
+        st.warning("⚠️ Model not loaded yet. Please train the model first in the **Train Model** tab.")
     else:
         st.subheader("Enter Customer Details")
 
@@ -206,10 +403,12 @@ with tab1:
                 st.error(f"API error: {resp.text}")
 
 
-# ======================== TAB 2: Batch Prediction =========================
+# ======================== TAB 2: Batch Prediction ===========================
 with tab2:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
+    elif not model_loaded:
+        st.warning("⚠️ Model not loaded yet. Please train the model first in the **Train Model** tab.")
     else:
         st.subheader("Upload Customer CSV")
         st.info("""

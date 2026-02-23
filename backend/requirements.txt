@@ -5,3 +5,6 @@ pandas
 numpy
 joblib
 python-multipart
+openpyxl
+huggingface_hub
+python-dotenv

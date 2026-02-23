@@ -34,3 +34,4 @@ reports/*.csv
 
 # Streamlit secrets
 .streamlit/
+/backend/.env
