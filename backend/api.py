@@ -377,9 +377,9 @@ def _run_training_pipeline(data_path: Path):
         training_status["message"] = "Training started..."
 
     try:
-        from src.preprocessing import preprocess_data
-        from src.feature_engineering import run_feature_engineering
-        from src.train import train_models
+        from backend.training.preprocessing import preprocess_data
+        from backend.training.feature_engineering import run_feature_engineering
+        from backend.training.train import train_models
 
         # Step 1: Preprocess
         with training_lock:

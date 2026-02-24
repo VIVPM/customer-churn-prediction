@@ -18,11 +18,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import FIGURES_DIR, TARGET_COLUMN
-from src.utils import create_directories, print_separator
-from src.data_loader import load_data
+from backend.training.utils import create_directories, print_separator
+from backend.training.data_loader import load_data
 
 
 def analyze_basic_info(df):

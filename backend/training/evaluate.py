@@ -11,12 +11,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from sklearn.metrics import classification_report, confusion_matrix
 
 from config import DATA_PROCESSED, MODELS_DIR, REPORTS_DIR, FIGURES_DIR
-from src.utils import load_model, load_dataframe, create_directories, print_separator
+from backend.training.utils import load_model, load_dataframe, create_directories, print_separator
 
 
 def load_test_data():

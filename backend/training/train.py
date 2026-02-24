@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
@@ -21,7 +21,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 
 from config import DATA_PROCESSED, MODELS_DIR, TARGET_COLUMN, TEST_SIZE, RANDOM_STATE
-from src.utils import save_model, load_dataframe, create_directories, print_separator
+from backend.training.utils import save_model, load_dataframe, create_directories, print_separator
 
 
 # Model configurations with hyperparameter grids (matching notebook)

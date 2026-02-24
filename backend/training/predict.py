@@ -12,10 +12,10 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import MODELS_DIR, DATA_PROCESSED
-from src.utils import load_model, load_dataframe
+from backend.training.utils import load_model, load_dataframe
 
 
 def load_prediction_artifacts():

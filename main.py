@@ -20,13 +20,13 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.data_loader import load_data
-from src.eda import run_eda
-from src.preprocessing import preprocess_data
-from src.feature_engineering import run_feature_engineering
-from src.train import train_models
-from src.evaluate import evaluate_models
-from src.predict import interactive_prediction
+from backend.training.data_loader import load_data
+from backend.training.eda import run_eda
+from backend.training.preprocessing import preprocess_data
+from backend.training.feature_engineering import run_feature_engineering
+from backend.training.train import train_models
+from backend.training.evaluate import evaluate_models
+from backend.training.predict import interactive_prediction
 
 
 def print_banner():

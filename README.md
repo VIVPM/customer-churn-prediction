@@ -61,23 +61,23 @@ customer-churn-prediction/
 │   ├── requirements.txt     # API dependencies
 │   ├── render.yaml          # Render deployment config
 │   ├── models/              # Model artifacts (copied for deployment)
-│   └── data/                # Feature names (copied for deployment)
+│   ├── data/                # Feature names (copied for deployment)
+│   └── training/            # Training scripts & ML Pipeline
+│       ├── __init__.py
+│       ├── data_loader.py       # Load and merge Excel sheets
+│       ├── eda.py               # Exploratory data analysis
+│       ├── preprocessing.py     # Data cleaning and encoding
+│       ├── feature_engineering.py # Feature selection
+│       ├── train.py             # Model training
+│       ├── evaluate.py          # Model evaluation & SHAP
+│       ├── predict.py           # Make predictions
+│       └── utils.py             # Helper functions
 ├── data/
 │   ├── raw/                 # Place your Excel file here
 │   └── processed/           # Generated train/test splits
 ├── models/                  # Saved trained models
 ├── reports/
 │   └── figures/             # Generated visualizations
-├── src/
-│   ├── __init__.py
-│   ├── data_loader.py       # Load and merge Excel sheets
-│   ├── eda.py               # Exploratory data analysis
-│   ├── preprocessing.py     # Data cleaning and encoding
-│   ├── feature_engineering.py # Feature selection
-│   ├── train.py             # Model training
-│   ├── evaluate.py          # Model evaluation & SHAP
-│   ├── predict.py           # Make predictions
-│   └── utils.py             # Helper functions
 ├── main.py                  # Pipeline runner
 ├── streamlit_app.py         # Streamlit UI (Frontend)
 ├── config.py                # Configuration settings
@@ -172,13 +172,13 @@ python main.py --predict
 ### Run Individual Modules
 
 ```bash
-python src/data_loader.py
-python src/eda.py
-python src/preprocessing.py
-python src/feature_engineering.py
-python src/train.py
-python src/evaluate.py
-python src/predict.py
+python backend/training/data_loader.py
+python backend/training/eda.py
+python backend/training/preprocessing.py
+python backend/training/feature_engineering.py
+python backend/training/train.py
+python backend/training/evaluate.py
+python backend/training/predict.py
 ```
 
 ## Pipeline Details

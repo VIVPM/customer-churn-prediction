@@ -16,14 +16,14 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import (
     DATA_PROCESSED, TARGET_COLUMN, ZSCORE_THRESHOLD,
     ZSCORE_COLUMNS, TEST_SIZE, RANDOM_STATE
 )
-from src.utils import create_directories, save_dataframe, print_separator
-from src.data_loader import load_data
+from backend.training.utils import create_directories, save_dataframe, print_separator
+from backend.training.data_loader import load_data
 
 
 def handle_missing_values(df):

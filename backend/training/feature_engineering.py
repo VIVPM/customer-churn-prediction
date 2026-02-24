@@ -13,12 +13,12 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import (
     DATA_PROCESSED, CORRELATION_THRESHOLD, HIGH_CORRELATION_COLUMNS
 )
-from src.utils import load_dataframe, save_dataframe, print_separator
+from backend.training.utils import load_dataframe, save_dataframe, print_separator
 
 
 def find_correlated_features(df, threshold):
