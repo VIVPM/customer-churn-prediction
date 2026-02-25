@@ -375,135 +375,139 @@ with tab_train:
 with tab1:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
-    elif not st.session_state.get("selected_version") or st.session_state.get("selected_version") == "local" and not model_loaded:
-        st.warning("⚠️ No model versions found on Hugging Face Hub. Please go to the **Train Model** tab and train your first model!")
-    else:
-        st.subheader("Enter Customer Details")
 
-        col1, col2, col3 = st.columns(3)
+    st.subheader("Enter Customer Details")
 
-        with col1:
-            customer_id = st.number_input("Customer ID", min_value=1, value=101, step=1)
-            transaction_id = st.number_input("Transaction ID", min_value=1, value=5000, step=1)
-            amount_spent = st.number_input("Amount Spent ($)", min_value=0.0, value=250.0, step=10.0)
-            interaction_id = st.number_input("Interaction ID", min_value=0.0, value=3000.0, step=1.0)
+    col1, col2, col3 = st.columns(3)
 
-        with col2:
-            login_frequency = st.number_input("Login Frequency", min_value=0, value=15, step=1)
-            transaction_year = st.number_input("Transaction Year", min_value=2020, max_value=2030, value=2022)
-            interaction_month = st.selectbox("Interaction Month", list(range(1, 13)), index=5)
-            product_category = st.selectbox("Product Category",
-                                            ["Books", "Clothing", "Electronics", "Furniture", "Groceries"])
+    with col1:
+        customer_id = st.number_input("Customer ID", min_value=1, value=101, step=1)
+        transaction_id = st.number_input("Transaction ID", min_value=1, value=5000, step=1)
+        amount_spent = st.number_input("Amount Spent ($)", min_value=0.0, value=250.0, step=10.0)
+        interaction_id = st.number_input("Interaction ID", min_value=0.0, value=3000.0, step=1.0)
 
-        with col3:
-            interaction_type = st.selectbox("Interaction Type",
-                                           ["Complaint", "Feedback", "Inquiry"])
-            resolution_status = st.selectbox("Resolution Status", ["Resolved", "Unresolved"])
-            service_usage = st.selectbox("Service Usage", ["Mobile App", "Online Banking", "Website"])
+    with col2:
+        login_frequency = st.number_input("Login Frequency", min_value=0, value=15, step=1)
+        transaction_year = st.number_input("Transaction Year", min_value=2020, max_value=2030, value=2022)
+        interaction_month = st.selectbox("Interaction Month", list(range(1, 13)), index=5)
+        product_category = st.selectbox("Product Category",
+                                        ["Books", "Clothing", "Electronics", "Furniture", "Groceries"])
+
+    with col3:
+        interaction_type = st.selectbox("Interaction Type",
+                                       ["Complaint", "Feedback", "Inquiry"])
+        resolution_status = st.selectbox("Resolution Status", ["Resolved", "Unresolved"])
+        service_usage = st.selectbox("Service Usage", ["Mobile App", "Online Banking", "Website"])
 
         st.markdown("")
         predict_btn = st.button("🔮 Predict Churn", use_container_width=True, type="primary")
 
-        if predict_btn:
-            payload = {
-                "CustomerID": customer_id,
-                "TransactionID": transaction_id,
-                "AmountSpent": amount_spent,
-                "InteractionID": interaction_id,
-                "LoginFrequency": login_frequency,
-                "TransactionYear": transaction_year,
-                "InteractionMonth": interaction_month,
-                "ProductCategory": product_category,
-                "InteractionType": interaction_type,
-                "ResolutionStatus": resolution_status,
-                "ServiceUsage": service_usage,
-            }
+    if predict_btn and api_ok:
+        if not versions:
+            st.warning("⚠️ **Training Required:** No models are available on Hugging Face Hub. Please go to the **Train Model** tab to train and register your first model!")
+            st.stop()
+            
+        payload = {
+            "CustomerID": customer_id,
+            "TransactionID": transaction_id,
+            "AmountSpent": amount_spent,
+            "InteractionID": interaction_id,
+            "LoginFrequency": login_frequency,
+            "TransactionYear": transaction_year,
+            "InteractionMonth": interaction_month,
+            "ProductCategory": product_category,
+            "InteractionType": interaction_type,
+            "ResolutionStatus": resolution_status,
+            "ServiceUsage": service_usage,
+        }
 
-            with st.spinner("Predicting..."):
-                version = st.session_state.get("selected_version", "main")
-                resp = requests.post(f"{API_URL}/predict?version={version}", json=payload)
+        with st.spinner("Predicting..."):
+            version = st.session_state.get("selected_version", "main")
+            resp = requests.post(f"{API_URL}/predict?version={version}", json=payload)
 
-            if resp.status_code == 200:
-                result = resp.json()
+        if resp.status_code == 200:
+            result = resp.json()
 
-                st.markdown("---")
-                st.subheader("Prediction Result")
+            st.markdown("---")
+            st.subheader("Prediction Result")
 
-                r1, r2, r3 = st.columns(3)
+            r1, r2, r3 = st.columns(3)
 
-                with r1:
-                    risk = result["risk_level"]
-                    css_class = f"risk-{risk.lower()}"
-                    st.markdown(f'<div class="{css_class}">{risk} Risk</div>', unsafe_allow_html=True)
+            with r1:
+                risk = result["risk_level"]
+                css_class = f"risk-{risk.lower()}"
+                st.markdown(f'<div class="{css_class}">{risk} Risk</div>', unsafe_allow_html=True)
 
-                with r2:
-                    st.metric("Churn Probability", f"{result['churn_probability']:.1%}")
+            with r2:
+                st.metric("Churn Probability", f"{result['churn_probability']:.1%}")
 
-                with r3:
-                    label = "⚠️ Will Churn" if result["churn_prediction"] == 1 else "✅ Will Stay"
-                    st.metric("Prediction", label)
+            with r3:
+                label = "⚠️ Will Churn" if result["churn_prediction"] == 1 else "✅ Will Stay"
+                st.metric("Prediction", label)
 
-                st.info(f"**Recommendation:** {result['recommendation']}")
-            else:
-                st.error(f"API error: {resp.text}")
+            st.info(f"**Recommendation:** {result['recommendation']}")
+        else:
+            st.error(f"API error: {resp.text}")
 
 
 # ======================== TAB 2: Batch Prediction ===========================
 with tab2:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
-    elif not st.session_state.get("selected_version") or st.session_state.get("selected_version") == "local" and not model_loaded:
-        st.warning("⚠️ No model versions found on Hugging Face Hub. Please go to the **Train Model** tab and train your first model!")
-    else:
-        st.subheader("Upload Customer CSV")
-        st.info("""
-        CSV columns needed: **CustomerID, TransactionID, AmountSpent, InteractionID,
-        LoginFrequency, TransactionYear, InteractionMonth, ProductCategory, InteractionType,
-        ResolutionStatus, ServiceUsage**
-        """)
 
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    st.subheader("Upload Customer CSV")
+    st.info("""
+    CSV columns needed: **CustomerID, TransactionID, AmountSpent, InteractionID,
+    LoginFrequency, TransactionYear, InteractionMonth, ProductCategory, InteractionType,
+    ResolutionStatus, ServiceUsage**
+    """)
 
-        if uploaded_file is not None:
-            df_preview = pd.read_csv(uploaded_file)
-            st.markdown(f"**Loaded {len(df_preview)} customers**")
-            st.dataframe(df_preview.head(), use_container_width=True)
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
-            if st.button("🔮 Predict All", use_container_width=True, type="primary"):
-                uploaded_file.seek(0)
+    if uploaded_file is not None and api_ok:
+        df_preview = pd.read_csv(uploaded_file)
+        st.markdown(f"**Loaded {len(df_preview)} customers**")
+        st.dataframe(df_preview.head(), use_container_width=True)
 
-                with st.spinner(f"Predicting for {len(df_preview)} customers..."):
-                    version = st.session_state.get("selected_version", "main")
-                    resp = requests.post(
-                        f"{API_URL}/predict/batch?version={version}",
-                        files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
-                    )
+        if st.button("🔮 Predict All", use_container_width=True, type="primary"):
+            if not versions:
+                st.warning("⚠️ **Training Required:** No models are available on Hugging Face Hub. Please go to the **Train Model** tab to train and register your first model!")
+                st.stop()
+                
+            uploaded_file.seek(0)
 
-                if resp.status_code == 200:
-                    data = resp.json()
-                    results_df = pd.DataFrame(data["predictions"])
+            with st.spinner(f"Predicting for {len(df_preview)} customers..."):
+                version = st.session_state.get("selected_version", "main")
+                resp = requests.post(
+                    f"{API_URL}/predict/batch?version={version}",
+                    files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
+                )
 
-                    st.markdown("---")
-                    st.subheader("Results Summary")
-                    m1, m2, m3, m4 = st.columns(4)
-                    total = len(results_df)
-                    churners = results_df["churn_prediction"].sum()
+            if resp.status_code == 200:
+                data = resp.json()
+                results_df = pd.DataFrame(data["predictions"])
 
-                    m1.metric("Total Customers", total)
-                    m2.metric("Predicted Churners", int(churners))
-                    m3.metric("Churn Rate", f"{churners / total:.1%}")
-                    m4.metric("High Risk", int((results_df["risk_level"] == "High").sum()))
+                st.markdown("---")
+                st.subheader("Results Summary")
+                m1, m2, m3, m4 = st.columns(4)
+                total = len(results_df)
+                churners = results_df["churn_prediction"].sum()
 
-                    st.subheader("Detailed Predictions")
-                    st.dataframe(results_df, use_container_width=True)
+                m1.metric("Total Customers", total)
+                m2.metric("Predicted Churners", int(churners))
+                m3.metric("Churn Rate", f"{churners / total:.1%}")
+                m4.metric("High Risk", int((results_df["risk_level"] == "High").sum()))
 
-                    csv_out = results_df.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download Results CSV",
-                        csv_out,
-                        "churn_predictions.csv",
-                        "text/csv",
-                        use_container_width=True,
-                    )
-                else:
-                    st.error(f"API error: {resp.text}")
+                st.subheader("Detailed Predictions")
+                st.dataframe(results_df, use_container_width=True)
+
+                csv_out = results_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Results CSV",
+                    csv_out,
+                    "churn_predictions.csv",
+                    "text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.error(f"API error: {resp.text}")
