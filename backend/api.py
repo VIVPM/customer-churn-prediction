@@ -222,7 +222,7 @@ def _download_from_hf(version: str = "main"):
 # ---------------------------------------------------------------------------
 # Helper: Load model artifacts from local disk (after HF sync)
 # ---------------------------------------------------------------------------
-def _load_model_artifacts(version: str = "main"):
+def _load_model_artifacts(version: str = "main", download: bool = True):
     """Download from HF Hub (if configured), then load from local MODELS_DIR."""
     global model, scaler, model_name, feature_names, current_version
 
@@ -231,7 +231,7 @@ def _load_model_artifacts(version: str = "main"):
         return
 
     # Try to pull requested version from HuggingFace Hub first
-    if _hf_enabled():
+    if _hf_enabled() and download:
         
         # If no specific version requested, fetch the latest version tag
         if version == "main":
@@ -241,6 +241,10 @@ def _load_model_artifacts(version: str = "main"):
                 
         print(f"🔄 Pulling model from HuggingFace Hub ({HF_REPO_ID} @ {version})...")
         _download_from_hf(version=version)
+    elif not download:
+        print("ℹ️  Download skipped by request — loading from local files directly.")
+        if version == "main": # default tag
+            version = "local" # tag it as local since it hasn't synced
     else:
         print("ℹ️  HF Hub not configured — loading from local files.")
         version = "local"
@@ -479,8 +483,8 @@ def _run_training_pipeline(data_path: Path):
         best_cv = float(best_row["best_score"])
         best_name = str(best_row["model"])
 
-        # Reload models into memory (it will pull the latest version just uploaded)
-        _load_model_artifacts()
+        # Reload models into memory (skip download since we just built them)
+        _load_model_artifacts(download=False)
 
         with training_lock:
             training_status["status"]       = "completed"
@@ -524,7 +528,16 @@ async def root():
 async def predict(customer: CustomerInput, version: str = "main"):
     """Predict churn for a single customer using a specific model version."""
     if version != current_version:
-        _load_model_artifacts(version)
+        try:
+            _load_model_artifacts(version)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to load version '{version}': {str(e)}")
+            
+    if model is None or scaler is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Model artifacts not loaded. Check logs or call POST /train first.",
+        )
         
     df = _encode_customer(customer)
     return _predict_single(df)
@@ -534,7 +547,16 @@ async def predict(customer: CustomerInput, version: str = "main"):
 async def predict_batch(file: UploadFile = File(...), version: str = "main"):
     """Predict churn for multiple customers from CSV upload."""
     if version != current_version:
-        _load_model_artifacts(version)
+        try:
+            _load_model_artifacts(version)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to load version '{version}': {str(e)}")
+            
+    if model is None or scaler is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Model artifacts not loaded. Check logs or call POST /train first.",
+        )
         
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
@@ -567,11 +589,11 @@ async def get_model_info(version: str = "main"):
     if version != current_version:
         try:
              _load_model_artifacts(version)
-        except Exception:
-             pass # If it fails to load, it will fall through to the checks below
+        except Exception as e:
+             raise HTTPException(status_code=404, detail=f"Failed to load version '{version}': {str(e)}")
              
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded yet.")
+        raise HTTPException(status_code=404, detail="Model not loaded yet.")
         
     best_cv_score = None
     model_scores = None
