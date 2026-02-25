@@ -124,9 +124,18 @@ def check_api():
         return False, {}
 
 
-def get_model_info():
+def get_model_versions():
     try:
-        r = requests.get(f"{API_URL}/model/info", timeout=10)
+        r = requests.get(f"{API_URL}/model/versions", timeout=10)
+        if r.status_code == 200:
+            return r.json().get("versions", [])
+    except Exception:
+        pass
+    return []
+
+def get_model_info(version="main"):
+    try:
+        r = requests.get(f"{API_URL}/model/info?version={version}", timeout=10)
         if r.status_code == 200:
             return r.json()
     except Exception:
@@ -146,12 +155,28 @@ with st.sidebar:
 
     if api_ok:
         st.success("✅ API Connected")
-        info = get_model_info()
-        if info:
-            st.markdown(f"**Model:** `{info['model_name']}`")
-            st.markdown(f"**Features:** `{info['num_features']}`")
+        
+        # Version Selection
+        versions = get_model_versions()
+        
+        if not versions:
+             st.warning("⚠️ No model versions found on HF Hub. Train a model first.")
+             st.session_state["selected_version"] = "local"
         else:
-            st.warning("⚠️ Model not loaded yet — train first")
+             selected_version = st.selectbox(
+                 "📂 Select Model Version",
+                 options=reversed(versions), # Show newest first
+                 index=0
+             )
+             st.session_state["selected_version"] = selected_version
+
+             info = get_model_info(selected_version)
+             if info:
+                 st.markdown(f"**Model:** `{info['model_name']}`")
+                 st.markdown(f"**Features:** `{info['num_features']}`")
+                 st.markdown(f"**Version:** `{selected_version}`")
+             else:
+                 st.warning("⚠️ Model not loaded yet — train first")
     else:
         st.error("❌ API Offline")
         st.code("cd backend && uvicorn api:app --reload", language="bash")
@@ -246,23 +271,38 @@ with tab_train:
         refresh_placeholder = st.empty()
 
         def render_status():
-            if not st.session_state.get("training_triggered", False):
-                return None
-            try:
-                r = requests.get(f"{API_URL}/train/status", timeout=10)
-                if r.status_code != 200:
-                    return None
-                s = r.json()
-            except Exception:
-                return None
+            status = "idle"
+            s = {}
 
-            status = s.get("status", "idle")
-            message = s.get("message", "")
+            # First, check if there's an active or recently completed training in this session
+            if st.session_state.get("training_triggered", False):
+                try:
+                    r = requests.get(f"{API_URL}/train/status", timeout=10)
+                    if r.status_code == 200:
+                        s = r.json()
+                        status = s.get("status", "idle")
+                except Exception:
+                    pass
+
+            # If no active training is going on, check if a model version is loaded/selected
+            if status == "idle":
+                selected = st.session_state.get("selected_version")
+                if selected and selected != "local":
+                    info = get_model_info(selected)
+                    if info:
+                        status = "loaded_from_hf"
+                        s = {
+                            "message": f"Viewing model details for {selected} from Hugging Face Hub.",
+                            "model_name": info.get("model_name"),
+                            "best_cv_score": info.get("best_cv_score"),
+                            "num_features": info.get("num_features")
+                        }
 
             if status == "idle":
-                status_placeholder.info("💤 No training has been run yet. Upload data and click **Start Training**.")
+                status_placeholder.info("💤 No models trained yet. Upload data and click **Start Training**.")
 
             elif status == "running":
+                message = s.get("message", "")
                 status_placeholder.markdown(
                     f'<div class="status-running">🔄 <strong>Training in Progress</strong><br>{message}</div>',
                     unsafe_allow_html=True
@@ -284,12 +324,15 @@ with tab_train:
                 | 3 | Model Training (GridSearchCV) | {step3} |
                 """)
 
-            elif status == "completed":
+            elif status in ("completed", "loaded_from_hf"):
+                message = s.get("message", "")
+                title = "Training Complete!" if status == "completed" else "Model Loaded"
                 status_placeholder.markdown(
-                    f'<div class="status-completed">✅ <strong>Training Complete!</strong><br>{message}</div>',
+                    f'<div class="status-completed">✅ <strong>{title}</strong><br>{message}</div>',
                     unsafe_allow_html=True
                 )
                 steps_placeholder.markdown("""
+                #### 📊Training Status
                 | Step | Task | Status |
                 |------|------|--------|
                 | 1 | Data Preprocessing | ✅ |
@@ -299,10 +342,11 @@ with tab_train:
                 m1, m2, m3 = metrics_placeholder.columns(3)
                 m1.metric("🏆 Best Model", s.get("model_name", "-"))
                 cv = s.get("best_cv_score")
-                m2.metric("📈 CV Score", f"{cv:.4f}" if cv else "-")
+                m2.metric("📈 CV Score", f"{cv:.4f}" if cv and pd.notna(cv) else "-")
                 m3.metric("🔢 Features Used", s.get("num_features", "-"))
 
             elif status == "failed":
+                message = s.get("message", "")
                 status_placeholder.markdown(
                     f'<div class="status-failed">❌ <strong>Training Failed</strong><br>{message}</div>',
                     unsafe_allow_html=True
@@ -331,8 +375,8 @@ with tab_train:
 with tab1:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
-    elif not model_loaded:
-        st.warning("⚠️ Model not loaded yet. Please train the model first in the **Train Model** tab.")
+    elif not st.session_state.get("selected_version") or st.session_state.get("selected_version") == "local" and not model_loaded:
+        st.warning("⚠️ No model versions found on Hugging Face Hub. Please go to the **Train Model** tab and train your first model!")
     else:
         st.subheader("Enter Customer Details")
 
@@ -376,7 +420,8 @@ with tab1:
             }
 
             with st.spinner("Predicting..."):
-                resp = requests.post(f"{API_URL}/predict", json=payload)
+                version = st.session_state.get("selected_version", "main")
+                resp = requests.post(f"{API_URL}/predict?version={version}", json=payload)
 
             if resp.status_code == 200:
                 result = resp.json()
@@ -407,8 +452,8 @@ with tab1:
 with tab2:
     if not api_ok:
         st.warning("⚠️ Start the FastAPI backend to make predictions.")
-    elif not model_loaded:
-        st.warning("⚠️ Model not loaded yet. Please train the model first in the **Train Model** tab.")
+    elif not st.session_state.get("selected_version") or st.session_state.get("selected_version") == "local" and not model_loaded:
+        st.warning("⚠️ No model versions found on Hugging Face Hub. Please go to the **Train Model** tab and train your first model!")
     else:
         st.subheader("Upload Customer CSV")
         st.info("""
@@ -428,8 +473,9 @@ with tab2:
                 uploaded_file.seek(0)
 
                 with st.spinner(f"Predicting for {len(df_preview)} customers..."):
+                    version = st.session_state.get("selected_version", "main")
                     resp = requests.post(
-                        f"{API_URL}/predict/batch",
+                        f"{API_URL}/predict/batch?version={version}",
                         files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
                     )
 

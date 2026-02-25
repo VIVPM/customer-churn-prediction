@@ -43,13 +43,14 @@ except ImportError:
 # HuggingFace Hub config (read from environment)
 # ---------------------------------------------------------------------------
 HF_TOKEN   = os.environ.get("HF_TOKEN", "")
-HF_REPO_ID = os.environ.get("HF_REPO_ID", "vivpm99/customer-churn-model")
+HF_REPO_ID = os.environ.get("HF_REPO_ID", "")
 
 # Files to sync with HF Hub
 HF_FILES = [
     "best_model.joblib",
     "scaler.joblib",
     "best_model_name.txt",
+    "model_comparison.csv",
 ]
 
 # ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ model = None
 scaler = None
 model_name = "unknown"
 feature_names = []
+current_version = None
 
 # ---------------------------------------------------------------------------
 # Training status tracking
@@ -127,9 +129,20 @@ def _hf_enabled() -> bool:
     """Returns True if HF Hub is configured and available."""
     return HF_AVAILABLE and bool(HF_TOKEN) and HF_TOKEN != "your_hf_token_here"
 
+def _get_hf_versions():
+    """Fetch all available version tags from the HF repo."""
+    if not _hf_enabled():
+        return []
+    try:
+        api = HfApi(token=HF_TOKEN)
+        refs = api.list_repo_refs(repo_id=HF_REPO_ID)
+        return [tag.name for tag in refs.tags if tag.name.startswith("v")]
+    except Exception as e:
+        print(f"⚠️ Could not fetch versions: {e}")
+        return []
 
-def _upload_to_hf():
-    """Upload model artifacts from MODELS_DIR to HuggingFace Hub."""
+def _upload_to_hf(metrics_df=None):
+    """Upload model artifacts from MODELS_DIR to HuggingFace Hub and tag versions."""
     if not _hf_enabled():
         print("⚠️  HF Hub not configured — skipping upload.")
         return False
@@ -137,24 +150,44 @@ def _upload_to_hf():
         api = HfApi(token=HF_TOKEN)
         # Create repo if it doesn't exist
         api.create_repo(repo_id=HF_REPO_ID, exist_ok=True, private=False)
-        for fname in HF_FILES:
-            fpath = MODELS_DIR / fname
-            if fpath.exists():
-                api.upload_file(
-                    path_or_fileobj=str(fpath),
-                    path_in_repo=fname,
-                    repo_id=HF_REPO_ID,
-                    token=HF_TOKEN,
-                )
-                print(f"☁️  Uploaded {fname} → {HF_REPO_ID}")
+
+        # Determine next version
+        versions = _get_hf_versions()
+        if versions:
+            # Parse 'vX.0' to float and increment
+            latest_version_num = float(versions[-1].replace("v", ""))
+            new_version = f"v{latest_version_num + 1.0}"
+        else:
+            new_version = "v1.0"
+
+        # Upload files in a single commit using upload_folder
+        api.upload_folder(
+            folder_path=str(MODELS_DIR),
+            repo_id=HF_REPO_ID,
+            commit_message=f"Automated Training - {new_version}",
+            token=HF_TOKEN,
+            allow_patterns=["*.joblib", "*.txt", "*.json", "*.csv"]
+        )
+        print(f"☁️  Uploaded artifacts -> {HF_REPO_ID}")
+
+        # Tag the release
+        best_cv = metrics_df["best_score"].max() if metrics_df is not None else 0.0
+        api.create_tag(
+            repo_id=HF_REPO_ID,
+            tag=new_version,
+            tag_message=f"Automated Model Training. Best CV: {best_cv:.4f}",
+            token=HF_TOKEN
+        )
+        print(f"🏷️  Created new tag: {new_version}")
+        
         return True
     except Exception as e:
         print(f"❌ HF upload failed: {e}")
         return False
 
 
-def _download_from_hf():
-    """Download model artifacts from HuggingFace Hub into MODELS_DIR."""
+def _download_from_hf(version: str = "main"):
+    """Download model artifacts from HuggingFace Hub for a specific version tag."""
     if not _hf_enabled():
         return False
         
@@ -173,14 +206,15 @@ def _download_from_hf():
             hf_hub_download(
                 repo_id=HF_REPO_ID,
                 filename=fname,
+                revision=version,
                 token=HF_TOKEN,
                 local_dir=str(MODELS_DIR),
-                local_dir_use_symlinks=False, # Force actual download, don't just link cache
+                local_dir_use_symlinks=False, # Force actual download
             )
-            print(f"⬇️  Downloaded {fname} from {HF_REPO_ID}")
+            print(f"⬇️  Downloaded {fname} from {HF_REPO_ID} (rev: {version})")
         except Exception as e:
             if "404" in str(e):
-                raise FileNotFoundError(f"File '{fname}' missing in repo '{HF_REPO_ID}'. Please train a model.")
+                raise FileNotFoundError(f"File '{fname}' missing in repo '{HF_REPO_ID}' at {version}. Please train a model.")
             raise e
     return True
 
@@ -188,16 +222,28 @@ def _download_from_hf():
 # ---------------------------------------------------------------------------
 # Helper: Load model artifacts from local disk (after HF sync)
 # ---------------------------------------------------------------------------
-def _load_model_artifacts():
+def _load_model_artifacts(version: str = "main"):
     """Download from HF Hub (if configured), then load from local MODELS_DIR."""
-    global model, scaler, model_name, feature_names
+    global model, scaler, model_name, feature_names, current_version
 
-    # Try to pull latest from HuggingFace Hub first
+    # If the user asks for a specific version and we already have it loaded, skip
+    if version != "main" and current_version == version and model is not None:
+        return
+
+    # Try to pull requested version from HuggingFace Hub first
     if _hf_enabled():
-        print(f"🔄 Pulling model from HuggingFace Hub ({HF_REPO_ID})...")
-        _download_from_hf()
+        
+        # If no specific version requested, fetch the latest version tag
+        if version == "main":
+            tags = _get_hf_versions()
+            if tags:
+                version = tags[-1]
+                
+        print(f"🔄 Pulling model from HuggingFace Hub ({HF_REPO_ID} @ {version})...")
+        _download_from_hf(version=version)
     else:
         print("ℹ️  HF Hub not configured — loading from local files.")
+        version = "local"
 
     model_path  = MODELS_DIR / "best_model.joblib"
     scaler_path = MODELS_DIR / "scaler.joblib"
@@ -217,9 +263,12 @@ def _load_model_artifacts():
     feat_file = DATA_DIR / "feature_names_selected.csv"
     if not feat_file.exists():
         feat_file = DATA_DIR / "feature_names.csv"
-    feature_names = pd.read_csv(feat_file)["feature"].tolist()
+    if feat_file.exists():
+        feature_names = pd.read_csv(feat_file)["feature"].tolist()
+    
+    current_version = version
 
-    print(f"✅ Model loaded: {model_name} ({len(feature_names)} features)")
+    print(f"✅ Model loaded: {model_name} v: {version} ({len(feature_names)} features)")
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +330,8 @@ class PredictionResult(BaseModel):
 class ModelInfo(BaseModel):
     model_name: str
     num_features: int
+    best_cv_score: Optional[float] = None
+    model_scores: Optional[list[dict]] = None
     feature_names: list[str]
     categories: dict
 
@@ -421,14 +472,14 @@ def _run_training_pipeline(data_path: Path):
         # Upload to HuggingFace Hub
         with training_lock:
             training_status["message"] = "Uploading model to HuggingFace Hub..."
-        hf_uploaded = _upload_to_hf()
+        hf_uploaded = _upload_to_hf(metrics_df=scores_df)
 
         # Read best model info from scores_df
         best_row = scores_df.loc[scores_df["best_score"].idxmax()]
         best_cv = float(best_row["best_score"])
         best_name = str(best_row["model"])
 
-        # Reload models into memory
+        # Reload models into memory (it will pull the latest version just uploaded)
         _load_model_artifacts()
 
         with training_lock:
@@ -463,21 +514,28 @@ async def root():
     return {
         "status": "running",
         "model": model_name,
+        "version": current_version,
         "model_loaded": model is not None,
         "docs": "/docs",
     }
 
 
 @app.post("/predict", response_model=PredictionResult)
-async def predict(customer: CustomerInput):
-    """Predict churn for a single customer."""
+async def predict(customer: CustomerInput, version: str = "main"):
+    """Predict churn for a single customer using a specific model version."""
+    if version != current_version:
+        _load_model_artifacts(version)
+        
     df = _encode_customer(customer)
     return _predict_single(df)
 
 
 @app.post("/predict/batch")
-async def predict_batch(file: UploadFile = File(...)):
+async def predict_batch(file: UploadFile = File(...), version: str = "main"):
     """Predict churn for multiple customers from CSV upload."""
+    if version != current_version:
+        _load_model_artifacts(version)
+        
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
 
@@ -497,11 +555,35 @@ async def predict_batch(file: UploadFile = File(...)):
     return {"total": len(results), "predictions": results}
 
 
+@app.get("/model/versions")
+async def get_model_versions():
+    """Get a list of all available model versions from Hugging Face Hub."""
+    versions = _get_hf_versions()
+    return {"versions": versions or ["local"]}
+
 @app.get("/model/info", response_model=ModelInfo)
-async def get_model_info():
+async def get_model_info(version: str = "main"):
     """Get information about the deployed model."""
+    if version != current_version:
+        try:
+             _load_model_artifacts(version)
+        except Exception:
+             pass # If it fails to load, it will fall through to the checks below
+             
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded yet.")
+        
+    best_cv_score = None
+    model_scores = None
+    comparison_file = MODELS_DIR / "model_comparison.csv"
+    if comparison_file.exists():
+        try:
+            df_comp = pd.read_csv(comparison_file)
+            best_cv_score = float(df_comp["best_score"].max())
+            model_scores = df_comp.to_dict(orient="records")
+        except Exception:
+            pass
+            
     categories = {}
     for cat_field, info in CATEGORY_ENCODINGS.items():
         options = [col.split("_", 1)[1] for col in info["columns"]]
@@ -511,6 +593,8 @@ async def get_model_info():
     return ModelInfo(
         model_name=model_name,
         num_features=len(feature_names),
+        best_cv_score=best_cv_score,
+        model_scores=model_scores,
         feature_names=feature_names,
         categories=categories,
     )

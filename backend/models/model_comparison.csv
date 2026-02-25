@@ -1,5 +1,5 @@
 model,best_score,best_params
 svm,0.8216193629371278,"{'C': 10, 'kernel': 'rbf'}"
-random_forest,0.9339311379011128,{'n_estimators': 100}
+random_forest,0.9320961070252146,{'n_estimators': 80}
 logistic_regression,0.8016149821821215,{'C': 1}
-decision_tree,0.9574224311505379,{'criterion': 'entropy'}
+decision_tree,0.9550359306155803,{'criterion': 'entropy'}

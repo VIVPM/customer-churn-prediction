@@ -22,6 +22,7 @@ from sklearn.preprocessing import StandardScaler
 
 from config import DATA_PROCESSED, MODELS_DIR, TARGET_COLUMN, TEST_SIZE, RANDOM_STATE
 from backend.training.utils import save_model, load_dataframe, create_directories, print_separator
+from backend.api import _upload_to_hf
 
 
 # Model configurations with hyperparameter grids (matching notebook)
@@ -180,6 +181,9 @@ def train_models():
     print(f"Saved scaler to: {MODELS_DIR / 'scaler.joblib'}")
     print(f"Saved best model ({best_model_name}) to: {MODELS_DIR / 'best_model.joblib'}")
     print(f"Saved comparison to: {MODELS_DIR / 'model_comparison.csv'}")
+
+    print_separator("UPLOADING TO HUGGING FACE")
+    _upload_to_hf(metrics_df=scores_df)
 
     print_separator("TRAINING COMPLETE")
 
