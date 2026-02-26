@@ -11,17 +11,15 @@ Run:
 import streamlit as st
 import requests
 import pandas as pd
-import os
 import time
 
 # ---------------------------------------------------------------------------
-# Config — reads from Streamlit secrets (deployed) or defaults to localhost
+# Config — API URL from .streamlit/secrets.toml
 # ---------------------------------------------------------------------------
-API_URL = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
-try:
+if "API_URL" in st.secrets:
     API_URL = st.secrets["API_URL"].rstrip("/")
-except (FileNotFoundError, KeyError):
-    pass
+else:
+    API_URL = "http://localhost:8000"
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -195,7 +193,6 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 st.title("🔮 Customer Churn Prediction")
 st.caption("Predict which customers are likely to leave — powered by Machine Learning")
-st.markdown("---")
 
 
 # ---------------------------------------------------------------------------
