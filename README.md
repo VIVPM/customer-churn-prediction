@@ -24,22 +24,32 @@ The pipeline demonstrates:
 The project follows a modular, end-to-end Machine Learning pipeline:
 
 ```mermaid
-flowchart TD
-    User(["👤 User"])
+graph LR
+    %% Data Stage
+    subgraph Data_Pipeline [1. Data Pipeline]
+        Raw[Raw Excel Data] -->|data_loader.py| Merged[Merged Dataframe]
+        Merged -->|preprocessing.py| Clean["Cleaned Data<br>(Outliers Removed)"]
+        Clean -->|feature_engineering.py| Features["Selected Features<br>(Correlation Filter)"]
+    end
 
-    User -->|browser| UI["🖥️ Streamlit UI\n(:8501)\nSingle Predict · Batch Predict · Train"]
-    UI -->|REST| API["⚙️ FastAPI Backend\n(:8000)\n/predict · /train · /model/info"]
+    %% Training Stage
+    subgraph Training_Pipeline [2. Model Training]
+        Features -->|train.py| Grid["GridSearchCV<br>(5-Fold CV)"]
+        Grid -->|Optimize| Best["Best Model<br>(Decision Tree)"]
+        Best -->|Save| Artifacts["Model Artifacts<br>(.joblib)"]
+    end
 
-    API -->|POST /train| TP["🔄 Training Pipeline"]
+    %% Serving Stage
+    subgraph Deployment [3. Inference & Serving]
+        Artifacts -->|Load| API["FastAPI Backend<br>(Render)"]
+        API -->|Serve| UI["Streamlit Dashboard<br>(Streamlit Cloud)"]
+        User[End User] -->|Interact| UI
+    end
 
-    TP --> P["preprocessing.py\nclean · encode · split"]
-    P  --> FE["feature_engineering.py\ncorrelation filter"]
-    FE --> TR["train.py\nGridSearchCV × 4 models"]
-    TR --> BM["Best Model\n(Decision Tree)"]
-
-    BM -->|upload artifacts| HF[("🤗 Hugging Face Hub\nmodel versions")]
-    HF -->|download on startup| API
-    API -->|predict| User
+    %% Styling
+    style Data_Pipeline fill:#e1f5fe,stroke:#01579b
+    style Training_Pipeline fill:#fff3e0,stroke:#e65100
+    style Deployment fill:#e8f5e9,stroke:#1b5e20
 ```
 
 ## Project Structure
@@ -89,73 +99,53 @@ This project expects an Excel file with 4 sheets:
 
 Place your Excel file as `data/raw/Customer_Churn_Data_Large.xlsx`
 
-## Setup
+## Installation
 
-### 1. Clone and create a virtual environment
-
+1. Clone the repository:
 ```bash
 git clone https://github.com/VIVPM/customer-churn-prediction.git
 cd customer-churn-prediction
+```
 
+2. Create virtual environment:
+```bash
 python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-# Windows
-venv\Scripts\activate
-
-# Linux / Mac
-source venv/bin/activate
-
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Place your data file
+4. Place your data file in `data/raw/`
 
-Put your Excel file at:
-```
-data/raw/Customer_Churn_Data_Large.xlsx
-```
+## Usage
 
-The file must have these four sheets: `Transaction_History`, `Customer_Service`, `Online_Activity`, `Churn_Status`.
-
-### 3. Configure credentials
-
-Create `backend/.env`:
-
-```
-HF_TOKEN=hf_your_token_here
-HF_REPO_ID=YourUsername/customer-churn-model
-```
-
-Create `.streamlit/secrets.toml`:
-
-```toml
-API_URL = "http://localhost:8000"
-```
-
-### 4. Set up Hugging Face Hub
-
-1. Create an account at [huggingface.co](https://huggingface.co)
-2. Go to **Settings → Access Tokens** → create a token with write access
-3. Create a new model repository (e.g. `YourUsername/customer-churn-model`)
-4. Paste both into `backend/.env`
-
-After each training run the API uploads a new versioned tag (`v1.0`, `v2.0`, ...)
-and downloads the latest on startup.
-
-## Running Locally
+### 1. Run Complete ML Pipeline
 
 ```bash
-# Terminal 1 — FastAPI backend
+python main.py --all
+```
+
+This runs: EDA → Preprocessing → Feature Engineering → Training → Evaluation
+
+### 2. Run Web UI (Streamlit + FastAPI)
+
+You need to run **two terminals** to use the web interface.
+
+**Terminal 1: Start Backend API**
+```bash
 cd backend
 uvicorn api:app --reload --port 8000
+```
 
-# Terminal 2 — Streamlit UI
+**Terminal 2: Start Frontend UI**
+```bash
 streamlit run streamlit_app.py
 ```
 
-- API docs: http://localhost:8000/docs
-- UI: http://localhost:8501
-
+Then open **http://localhost:8501** in your browser.
 
 ### 3. Run Individual Steps
 
