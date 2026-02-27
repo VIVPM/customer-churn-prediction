@@ -1,11 +1,6 @@
-"""
-Model Training Module
-=====================
-Trains multiple classification models using GridSearchCV with
-StandardScaler, matching the Part 2 notebook approach.
-
-Models: SVM, Random Forest, Logistic Regression, Decision Tree
-"""
+# Trains 4 classifiers (SVM, Random Forest, Logistic Regression, Decision Tree)
+# using GridSearchCV 5-fold CV, picks the winner, and saves it.
+# HF Hub upload is triggered at the end via api.py's _upload_to_hf.
 
 import pandas as pd
 import numpy as np
@@ -24,8 +19,7 @@ from config import DATA_PROCESSED, MODELS_DIR, TARGET_COLUMN, TEST_SIZE, RANDOM_
 from backend.training.utils import save_model, load_dataframe, create_directories, print_separator
 from backend.api import _upload_to_hf
 
-
-# Model configurations with hyperparameter grids (matching notebook)
+# Hyperparameter grids — these match what the notebook found to be reasonable ranges
 MODEL_PARAMS = {
     'svm': {
         'model': SVC(gamma='auto'),
@@ -56,10 +50,12 @@ MODEL_PARAMS = {
 
 
 def load_training_data():
-    """Load preprocessed training data (feature-selected if available)."""
+    """
+    Prefers feature-selected X_train if it exists (run feature_engineering.py first).
+    Falls back to X_train.csv if not — still works, just uses more features.
+    """
     print_separator("LOADING TRAINING DATA")
 
-    # Prefer feature-selected data, fall back to raw processed
     X_train_path = DATA_PROCESSED / 'X_train_selected.csv'
     if not X_train_path.exists():
         X_train_path = DATA_PROCESSED / 'X_train.csv'
@@ -71,26 +67,24 @@ def load_training_data():
     print(f"X_train shape: {X_train.shape}")
     print(f"y_train shape: {y_train.shape}")
     print(f"Class distribution: {pd.Series(y_train).value_counts().to_dict()}")
-
     return X_train, y_train
 
 
 def scale_features(X_train):
-    """Apply StandardScaler to features (matching notebook cell 11)."""
+    """StandardScaler fit on train only. Scaler is returned so we can apply it at prediction time."""
     print_separator("FEATURE SCALING")
 
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-
     print(f"Scaled training data shape: {X_train_scaled.shape}")
-
     return X_train_scaled, scaler
 
 
 def run_gridsearch(X_train_scaled, y_train):
     """
-    Run GridSearchCV for all models (matching notebook cells 12-13).
-    Returns list of score dicts and trained GridSearchCV objects.
+    Run 5-fold GridSearchCV for each model. Returns:
+    - scores: list of {model, best_score, best_params} dicts
+    - grid_searches: {model_name: fitted GridSearchCV object}
     """
     print_separator("GRIDSEARCH HYPERPARAMETER TUNING")
 
@@ -99,17 +93,12 @@ def run_gridsearch(X_train_scaled, y_train):
 
     for model_name, mp in MODEL_PARAMS.items():
         print(f"\nTraining {model_name}...")
-        clf = GridSearchCV(
-            mp['model'],
-            mp['params'],
-            cv=5,
-            return_train_score=False
-        )
+        clf = GridSearchCV(mp['model'], mp['params'], cv=5, return_train_score=False)
         clf.fit(X_train_scaled, y_train)
 
         scores.append({
-            'model': model_name,
-            'best_score': clf.best_score_,
+            'model':       model_name,
+            'best_score':  clf.best_score_,
             'best_params': clf.best_params_
         })
         grid_searches[model_name] = clf
@@ -122,19 +111,17 @@ def run_gridsearch(X_train_scaled, y_train):
 
 def select_best_model(scores, X_train_scaled, y_train):
     """
-    Select and retrain the best model (matching notebook cell 15).
-    Returns the trained best model.
+    Print the comparison table, pick the highest CV score, retrain that model
+    with the best params on the full training set.
     """
     print_separator("MODEL COMPARISON")
 
-    # Display scores as DataFrame (matching notebook cell 14)
     scores_df = pd.DataFrame(scores, columns=['model', 'best_score', 'best_params'])
     print(scores_df.to_string(index=True))
 
-    # Find best model
     best_model_info = max(scores, key=lambda x: x['best_score'])
     best_model_name = best_model_info['model']
-    best_params = best_model_info['best_params']
+    best_params     = best_model_info['best_params']
 
     print(f"\n{'='*40}")
     print(f"Best Model: {best_model_name}")
@@ -142,7 +129,6 @@ def select_best_model(scores, X_train_scaled, y_train):
     print(f"Best Params: {best_params}")
     print(f"{'='*40}")
 
-    # Retrain best model with best params
     best_model = MODEL_PARAMS[best_model_name]['model']
     best_model.set_params(**best_params)
     best_model.fit(X_train_scaled, y_train)
@@ -151,30 +137,20 @@ def select_best_model(scores, X_train_scaled, y_train):
 
 
 def train_models():
-    """Run the complete training pipeline."""
+    """Full training pipeline: load → scale → grid search → pick best → save → upload."""
     create_directories(MODELS_DIR)
 
-    # Load data
     X_train, y_train = load_training_data()
-
-    # Scale features
     X_train_scaled, scaler = scale_features(X_train)
+    scores, grid_searches  = run_gridsearch(X_train_scaled, y_train)
+    best_model, best_model_name, scores_df = select_best_model(scores, X_train_scaled, y_train)
 
-    # Run GridSearchCV
-    scores, grid_searches = run_gridsearch(X_train_scaled, y_train)
-
-    # Select best model
-    best_model, best_model_name, scores_df = select_best_model(
-        scores, X_train_scaled, y_train
-    )
-
-    # Save artifacts
     print_separator("SAVING MODELS")
     save_model(scaler, MODELS_DIR / 'scaler.joblib')
     save_model(best_model, MODELS_DIR / 'best_model.joblib')
     scores_df.to_csv(MODELS_DIR / 'model_comparison.csv', index=False)
 
-    # Save model name for evaluate.py
+    # Write best model name to a text file so evaluate.py can load the right one
     with open(MODELS_DIR / 'best_model_name.txt', 'w') as f:
         f.write(best_model_name)
 
@@ -186,7 +162,6 @@ def train_models():
     _upload_to_hf(metrics_df=scores_df)
 
     print_separator("TRAINING COMPLETE")
-
     return best_model, scaler, scores_df
 
 

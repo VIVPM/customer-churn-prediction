@@ -107,10 +107,15 @@ git clone https://github.com/VIVPM/customer-churn-prediction.git
 cd customer-churn-prediction
 ```
 
-2. Create virtual environment:
+2. Create a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Windows
+venv\Scripts\activate
+
+# Linux / Mac
+source venv/bin/activate
 ```
 
 3. Install dependencies:
@@ -120,7 +125,46 @@ pip install -r requirements.txt
 
 4. Place your data file in `data/raw/`
 
-## Usage
+### Hugging Face Hub (model versioning)
+
+1. Create an account at [huggingface.co](https://huggingface.co)
+2. Go to **Settings → Access Tokens** and create a write-access token
+3. Create a model repository (e.g. `YourUsername/customer-churn-model`)
+4. Create `backend/.env`:
+
+```
+HF_TOKEN=hf_your_token_here
+HF_REPO_ID=YourUsername/customer-churn-model
+```
+
+The API uploads a versioned tag after each training run and downloads the latest on startup. You can roll back to any previous version from the sidebar dropdown.
+
+### Modal (optional GPU training)
+
+Training defaults to local CPU. To enable Modal GPU:
+
+```bash
+pip install modal
+
+# Authenticate
+python -m modal setup
+
+# Create secret for the GPU container to access HF Hub
+python -m modal secret create churn-secrets \
+    HF_TOKEN=hf_your_token \
+    HF_REPO_ID=YourUsername/customer-churn-model
+
+# Deploy the training function
+python -m modal deploy backend/training/modal_train.py
+```
+
+Add your Modal tokens to `backend/.env` (find them in `~/.modal.toml` after setup):
+
+```
+MODAL_TOKEN_ID=ak-...
+MODAL_TOKEN_SECRET=as-...
+```
+
 
 ### 1. Run Complete ML Pipeline
 
