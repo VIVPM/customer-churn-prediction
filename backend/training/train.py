@@ -1,11 +1,8 @@
-"""
-Model Training Module
-=====================
-Trains multiple classification models using GridSearchCV with
-StandardScaler, matching the Part 2 notebook approach.
-
-Models: SVM, Random Forest, Logistic Regression, Decision Tree
-"""
+# Trains four classifiers with GridSearchCV, picks the best one,
+# and saves it along with the scaler and comparison CSV.
+#
+# Models: SVM, Random Forest, Logistic Regression, Decision Tree
+# Tuning: 5-fold CV, matching the Part 2 notebook approach
 
 import pandas as pd
 import numpy as np
@@ -25,91 +22,77 @@ from backend.training.utils import save_model, load_dataframe, create_directorie
 from backend.api import _upload_to_hf
 
 
-# Model configurations with hyperparameter grids (matching notebook)
+# Hyperparameter grids from the notebook — extend if you want to explore more
 MODEL_PARAMS = {
     'svm': {
-        'model': SVC(gamma='auto'),
-        'params': {
-            'C': [1, 10, 20],
-            'kernel': ['rbf', 'linear']
-        }
+        'model':  SVC(gamma='auto'),
+        'params': {'C': [1, 10, 20], 'kernel': ['rbf', 'linear']}
     },
     'random_forest': {
-        'model': RandomForestClassifier(),
-        'params': {
-            'n_estimators': [50, 60, 70, 80, 90, 100]
-        }
+        'model':  RandomForestClassifier(),
+        'params': {'n_estimators': [50, 60, 70, 80, 90, 100]}
     },
     'logistic_regression': {
-        'model': LogisticRegression(solver='liblinear'),
-        'params': {
-            'C': [1, 5, 10],
-        }
+        'model':  LogisticRegression(solver='liblinear'),
+        'params': {'C': [1, 5, 10]}
     },
     'decision_tree': {
-        'model': DecisionTreeClassifier(),
-        'params': {
-            'criterion': ['gini', 'entropy']
-        }
+        'model':  DecisionTreeClassifier(),
+        'params': {'criterion': ['gini', 'entropy']}
     }
 }
 
 
 def load_training_data():
-    """Load preprocessed training data (feature-selected if available)."""
+    """
+    Prefer feature-selected data (X_train_selected.csv) if it exists,
+    fall back to X_train.csv if feature engineering hasn't been run yet.
+    """
     print_separator("LOADING TRAINING DATA")
 
-    # Prefer feature-selected data, fall back to raw processed
     X_train_path = DATA_PROCESSED / 'X_train_selected.csv'
     if not X_train_path.exists():
         X_train_path = DATA_PROCESSED / 'X_train.csv'
-        print("Note: Using pre-selection features (run feature engineering first for best results)")
+        print("Note: using raw features — run feature engineering first for best results")
 
     X_train = load_dataframe(X_train_path)
     y_train = load_dataframe(DATA_PROCESSED / 'y_train.csv').values.ravel()
 
     print(f"X_train shape: {X_train.shape}")
-    print(f"y_train shape: {y_train.shape}")
     print(f"Class distribution: {pd.Series(y_train).value_counts().to_dict()}")
 
     return X_train, y_train
 
 
 def scale_features(X_train):
-    """Apply StandardScaler to features (matching notebook cell 11)."""
+    """Fit StandardScaler on train only, never on test."""
     print_separator("FEATURE SCALING")
 
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
-    print(f"Scaled training data shape: {X_train_scaled.shape}")
-
+    print(f"Scaled shape: {X_train_scaled.shape}")
     return X_train_scaled, scaler
 
 
 def run_gridsearch(X_train_scaled, y_train):
     """
-    Run GridSearchCV for all models (matching notebook cells 12-13).
-    Returns list of score dicts and trained GridSearchCV objects.
+    Run 5-fold GridSearchCV for each model.
+    Returns scores list (for comparison CSV) and the fitted GridSearchCV objects.
     """
     print_separator("GRIDSEARCH HYPERPARAMETER TUNING")
 
-    scores = []
+    scores       = []
     grid_searches = {}
 
     for model_name, mp in MODEL_PARAMS.items():
         print(f"\nTraining {model_name}...")
-        clf = GridSearchCV(
-            mp['model'],
-            mp['params'],
-            cv=5,
-            return_train_score=False
-        )
+        clf = GridSearchCV(mp['model'], mp['params'], cv=5, return_train_score=False)
         clf.fit(X_train_scaled, y_train)
 
         scores.append({
-            'model': model_name,
-            'best_score': clf.best_score_,
+            'model':       model_name,
+            'best_score':  clf.best_score_,
             'best_params': clf.best_params_
         })
         grid_searches[model_name] = clf
@@ -122,19 +105,17 @@ def run_gridsearch(X_train_scaled, y_train):
 
 def select_best_model(scores, X_train_scaled, y_train):
     """
-    Select and retrain the best model (matching notebook cell 15).
-    Returns the trained best model.
+    Find the highest CV-scoring model, retrain it with the best params
+    on the full training set, and return it.
     """
     print_separator("MODEL COMPARISON")
 
-    # Display scores as DataFrame (matching notebook cell 14)
-    scores_df = pd.DataFrame(scores, columns=['model', 'best_score', 'best_params'])
+    scores_df    = pd.DataFrame(scores, columns=['model', 'best_score', 'best_params'])
     print(scores_df.to_string(index=True))
 
-    # Find best model
     best_model_info = max(scores, key=lambda x: x['best_score'])
     best_model_name = best_model_info['model']
-    best_params = best_model_info['best_params']
+    best_params     = best_model_info['best_params']
 
     print(f"\n{'='*40}")
     print(f"Best Model: {best_model_name}")
@@ -142,7 +123,7 @@ def select_best_model(scores, X_train_scaled, y_train):
     print(f"Best Params: {best_params}")
     print(f"{'='*40}")
 
-    # Retrain best model with best params
+    # Retrain with best params so we have a clean fitted model (not a GridSearchCV wrapper)
     best_model = MODEL_PARAMS[best_model_name]['model']
     best_model.set_params(**best_params)
     best_model.fit(X_train_scaled, y_train)
@@ -151,36 +132,27 @@ def select_best_model(scores, X_train_scaled, y_train):
 
 
 def train_models():
-    """Run the complete training pipeline."""
+    """
+    Full training pipeline: load → scale → grid search → pick best → save.
+    Also uploads artifacts to HF Hub at the end.
+    """
     create_directories(MODELS_DIR)
 
-    # Load data
     X_train, y_train = load_training_data()
-
-    # Scale features
     X_train_scaled, scaler = scale_features(X_train)
+    scores, grid_searches  = run_gridsearch(X_train_scaled, y_train)
+    best_model, best_model_name, scores_df = select_best_model(scores, X_train_scaled, y_train)
 
-    # Run GridSearchCV
-    scores, grid_searches = run_gridsearch(X_train_scaled, y_train)
-
-    # Select best model
-    best_model, best_model_name, scores_df = select_best_model(
-        scores, X_train_scaled, y_train
-    )
-
-    # Save artifacts
     print_separator("SAVING MODELS")
-    save_model(scaler, MODELS_DIR / 'scaler.joblib')
+    save_model(scaler,     MODELS_DIR / 'scaler.joblib')
     save_model(best_model, MODELS_DIR / 'best_model.joblib')
     scores_df.to_csv(MODELS_DIR / 'model_comparison.csv', index=False)
 
-    # Save model name for evaluate.py
+    # Record which model won so evaluate.py can load it by name
     with open(MODELS_DIR / 'best_model_name.txt', 'w') as f:
         f.write(best_model_name)
 
-    print(f"Saved scaler to: {MODELS_DIR / 'scaler.joblib'}")
     print(f"Saved best model ({best_model_name}) to: {MODELS_DIR / 'best_model.joblib'}")
-    print(f"Saved comparison to: {MODELS_DIR / 'model_comparison.csv'}")
 
     print_separator("UPLOADING TO HUGGING FACE")
     _upload_to_hf(metrics_df=scores_df)
