@@ -22,7 +22,7 @@ else:
     API_URL = "http://localhost:8000"
 
 # ---------------------------------------------------------------------------
-# Page config
+# Page config & Global State
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Churn Prediction Dashboard",
@@ -30,6 +30,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+if "is_training" not in st.session_state:
+    st.session_state["is_training"] = False
+if "is_predicting" not in st.session_state:
+    st.session_state["is_predicting"] = False
+if "is_batching" not in st.session_state:
+    st.session_state["is_batching"] = False
+
+def is_busy():
+    return st.session_state["is_training"] or st.session_state["is_predicting"] or st.session_state["is_batching"]
 
 # ---------------------------------------------------------------------------
 # CSS
@@ -235,10 +245,11 @@ with tab_train:
                 "🚀 Start Training",
                 use_container_width=True,
                 type="primary",
-                disabled=(uploaded_excel is None),
+                disabled=(uploaded_excel is None) or st.session_state["is_predicting"] or st.session_state["is_batching"],
             )
 
         if train_btn and uploaded_excel is not None:
+            st.session_state["is_training"] = True
             with st.spinner("Uploading data and starting training..."):
                 resp = requests.post(
                     f"{API_URL}/train",
@@ -246,6 +257,7 @@ with tab_train:
                                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
                     timeout=30,
                 )
+            st.session_state["is_training"] = False
             if resp.status_code == 200:
                 st.success("✅ Training started! Monitor progress below.")
                 st.session_state["training_triggered"] = True
@@ -397,7 +409,7 @@ with tab1:
         service_usage = st.selectbox("Service Usage", ["Mobile App", "Online Banking", "Website"])
 
         st.markdown("")
-        predict_btn = st.button("🔮 Predict Churn", use_container_width=True, type="primary")
+        predict_btn = st.button("🔮 Predict Churn", use_container_width=True, type="primary", disabled=st.session_state["is_training"] or st.session_state["is_batching"])
 
     if predict_btn and api_ok:
         if not versions:
@@ -418,9 +430,11 @@ with tab1:
             "ServiceUsage": service_usage,
         }
 
+        st.session_state["is_predicting"] = True
         with st.spinner("Predicting..."):
             version = st.session_state.get("selected_version", "main")
             resp = requests.post(f"{API_URL}/predict?version={version}", json=payload)
+        st.session_state["is_predicting"] = False
 
         if resp.status_code == 200:
             result = resp.json()
@@ -466,19 +480,21 @@ with tab2:
         st.markdown(f"**Loaded {len(df_preview)} customers**")
         st.dataframe(df_preview.head(), use_container_width=True)
 
-        if st.button("🔮 Predict All", use_container_width=True, type="primary"):
+        if st.button("🔮 Predict All", use_container_width=True, type="primary", disabled=st.session_state["is_training"] or st.session_state["is_predicting"]):
             if not versions:
                 st.warning("⚠️ **Training Required:** No models are available on Hugging Face Hub. Please go to the **Train Model** tab to train and register your first model!")
                 st.stop()
                 
             uploaded_file.seek(0)
 
+            st.session_state["is_batching"] = True
             with st.spinner(f"Predicting for {len(df_preview)} customers..."):
                 version = st.session_state.get("selected_version", "main")
                 resp = requests.post(
                     f"{API_URL}/predict/batch?version={version}",
                     files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
                 )
+            st.session_state["is_batching"] = False
 
             if resp.status_code == 200:
                 data = resp.json()

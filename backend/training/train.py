@@ -22,26 +22,26 @@ from backend.api import _upload_to_hf
 # Hyperparameter grids — these match what the notebook found to be reasonable ranges
 MODEL_PARAMS = {
     'svm': {
-        'model': SVC(gamma='auto'),
+        'model': SVC(gamma='auto', class_weight='balanced'),
         'params': {
             'C': [1, 10, 20],
             'kernel': ['rbf', 'linear']
         }
     },
     'random_forest': {
-        'model': RandomForestClassifier(),
+        'model': RandomForestClassifier(class_weight='balanced'),
         'params': {
             'n_estimators': [50, 60, 70, 80, 90, 100]
         }
     },
     'logistic_regression': {
-        'model': LogisticRegression(solver='liblinear'),
+        'model': LogisticRegression(solver='liblinear', class_weight='balanced'),
         'params': {
             'C': [1, 5, 10],
         }
     },
     'decision_tree': {
-        'model': DecisionTreeClassifier(),
+        'model': DecisionTreeClassifier(class_weight='balanced'),
         'params': {
             'criterion': ['gini', 'entropy']
         }

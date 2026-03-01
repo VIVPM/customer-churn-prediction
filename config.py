@@ -49,10 +49,8 @@ RANDOM_STATE = 42
 
 # Columns to compute z-scores for
 ZSCORE_COLUMNS = [
-    'CustomerID', 'TransactionID', 'AmountSpent', 'InteractionID',
-    'LoginFrequency', 'DaysSinceLastTransaction', 'DaysSinceLastInteraction',
-    'DaysSinceLastLogin', 'TransactionMonth', 'InteractionMonth',
-    'InteractionYear', 'LastLoginMonth'
+    'AmountSpent', 'LoginFrequency', 'DaysSinceLastTransaction', 
+    'DaysSinceLastInteraction', 'DaysSinceLastLogin'
 ]
 
 # Columns to drop after feature selection (high correlation)

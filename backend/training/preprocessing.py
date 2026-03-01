@@ -32,19 +32,22 @@ def handle_missing_values(df):
     print(f"Missing values before: {df.isna().sum().sum()}")
 
     if 'InteractionID' in df.columns and df['InteractionID'].isna().any():
-        df['InteractionID'] = df['InteractionID'].fillna(int(df['InteractionID'].mean()))
+        df['InteractionID'] = df['InteractionID'].fillna(-1)
 
     if 'InteractionDate' in df.columns and df['InteractionDate'].isna().any():
-        df['InteractionDate'] = df['InteractionDate'].ffill()
+        if 'TransactionDate' in df.columns:
+            df['InteractionDate'] = df['InteractionDate'].fillna(df['TransactionDate'])
+        else:
+            df['InteractionDate'] = df['InteractionDate'].ffill()
 
     if 'InteractionType' in df.columns and df['InteractionType'].isna().any():
-        df['InteractionType'] = df['InteractionType'].fillna(df['InteractionType'].mode().iloc[0])
+        df['InteractionType'] = df['InteractionType'].fillna('No Interaction')
 
     if 'ResolutionStatus' in df.columns and df['ResolutionStatus'].isna().any():
-        df['ResolutionStatus'] = df['ResolutionStatus'].fillna(df['ResolutionStatus'].mode().iloc[0])
+        df['ResolutionStatus'] = df['ResolutionStatus'].fillna('No Interaction')
 
     if 'DaysSinceLastInteraction' in df.columns and df['DaysSinceLastInteraction'].isna().any():
-        df['DaysSinceLastInteraction'] = df['DaysSinceLastInteraction'].ffill()
+        df['DaysSinceLastInteraction'] = df['DaysSinceLastInteraction'].fillna(999)
 
     # Catch-all for any remaining numeric/categorical NaNs
     for col in df.select_dtypes(include=[np.number]).columns:
@@ -112,7 +115,8 @@ def encode_categorical_features(df):
     print("\nEncoding categorical features...")
 
     date_cols = ['TransactionDate', 'InteractionDate', 'LastLoginDate']
-    df = df.drop(columns=[c for c in date_cols if c in df.columns], errors='ignore')
+    id_cols = ['CustomerID', 'TransactionID', 'InteractionID']
+    df = df.drop(columns=[c for c in date_cols + id_cols if c in df.columns], errors='ignore')
 
     cat_cols = df.select_dtypes(include=['object']).columns.tolist()
     print(f"Categorical columns to encode: {cat_cols}")
