@@ -78,7 +78,6 @@ customer-churn-prediction/
 ├── models/                  # Saved trained models
 ├── reports/
 │   └── figures/             # Generated visualizations
-├── main.py                  # Pipeline runner
 ├── streamlit_app.py         # Streamlit UI (Frontend)
 ├── config.py                # Configuration settings
 ├── requirements.txt         # Project dependencies
@@ -166,15 +165,7 @@ MODAL_TOKEN_SECRET=as-...
 ```
 
 
-### 1. Run Complete ML Pipeline
-
-```bash
-python main.py --all
-```
-
-This runs: EDA → Preprocessing → Feature Engineering → Training → Evaluation
-
-### 2. Run Web UI (Streamlit + FastAPI)
+### 1. Run Web UI (Streamlit + FastAPI)
 
 You need to run **two terminals** to use the web interface.
 
@@ -191,26 +182,20 @@ streamlit run streamlit_app.py
 
 Then open **http://localhost:8501** in your browser.
 
-### 3. Run Individual Steps
 
+The training and prediction pipeline is now fully integrated into the API and Streamlit dashboard. 
+
+To train a new model:
+1. Start the API and Streamlit UI.
+2. Go to the "Train Model" tab in the Streamlit UI.
+3. Upload your `.xlsx` data file and click **Run Training Pipeline**.
+
+Alternatively, trigger it via the API:
 ```bash
-# Exploratory Data Analysis
-python main.py --eda
-
-# Data Preprocessing
-python main.py --preprocess
-
-# Feature Engineering
-python main.py --features
-
-# Model Training
-python main.py --train
-
-# Model Evaluation
-python main.py --evaluate
-
-# Interactive Prediction
-python main.py --predict
+curl -X POST "http://localhost:8000/train" \
+     -H "accept: application/json" \
+     -H "Content-Type: multipart/form-data" \
+     -F "file=@data/raw/Customer_Churn_Data_Large.xlsx"
 ```
 
 ### Run Individual Modules
