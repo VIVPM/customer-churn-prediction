@@ -1,6 +1,6 @@
 # Customer Churn Prediction
 
-A machine learning project to predict customer churn using multi-source data analysis. Built with clean, modular Python scripts.
+Churn prediction using SVM, Random Forest, Logistic Regression, and Decision Tree trained on multi-source Excel data (transactions, service history, online activity). GridSearchCV hyperparameter tuning, Z-score outlier detection, correlation-based feature selection, SHAP explainability, FastAPI backend, and Streamlit UI with model versioning on Hugging Face Hub.
 
 ## Overview
 
@@ -17,7 +17,7 @@ The pipeline demonstrates:
 - Correlation-based feature selection
 - Multiple ML model training and comparison
 - SHAP-based model explainability
-- Production-ready prediction pipeline
+- Automated prediction pipeline
 
 ## System Architecture
 
@@ -371,15 +371,6 @@ From Model Training:
 - seaborn
 - openpyxl (for Excel files)
 
-## Future Improvements
-
-- [ ] Add hyperparameter tuning with Optuna
-- [ ] Implement more feature engineering techniques
-- [ ] Add time-series features
-- [ ] Create REST API for predictions
-- [ ] Add unit tests
-- [ ] Containerize with Docker
-- [ ] Add MLflow for experiment tracking
 
 ## License
 
