@@ -223,7 +223,7 @@ with tab_train:
     The pipeline runs:
     - **Step 1** — Data Preprocessing (missing values, outlier removal, encoding)
     - **Step 2** — Feature Engineering (correlation analysis, feature selection)
-    - **Step 3** — Model Training (GridSearchCV across SVM, Random Forest, Logistic Regression, Decision Tree)
+    - **Step 3** — Model Training (Decision Tree)
     """)
 
     if not api_ok:
@@ -330,7 +330,7 @@ with tab_train:
                 |------|------|--------|
                 | 1 | Data Preprocessing | {step1} |
                 | 2 | Feature Engineering | {step2} |
-                | 3 | Model Training (GridSearchCV) | {step3} |
+                | 3 | Model Training (Decision Tree) | {step3} |
                 """)
 
             elif status in ("completed", "loaded_from_hf"):
@@ -346,7 +346,7 @@ with tab_train:
                 |------|------|--------|
                 | 1 | Data Preprocessing | ✅ |
                 | 2 | Feature Engineering | ✅ |
-                | 3 | Model Training (GridSearchCV) | ✅ |
+                | 3 | Model Training (Decision Tree) | ✅ |
                 """)
                 m1, m2, m3 = metrics_placeholder.columns(3)
                 m1.metric("🏆 Best Model", s.get("model_name", "-"))
