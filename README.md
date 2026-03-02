@@ -34,7 +34,7 @@ graph LR
 
     %% Training Stage
     subgraph Training_Pipeline [2. Model Training]
-        Features -->|train.py| Grid["GridSearchCV<br>(5-Fold CV)"]
+        Features -->|train.py| Grid["Direct Model Training"]
         Grid -->|Optimize| Best["Best Model<br>(Decision Tree)"]
         Best -->|Save| Artifacts["Model Artifacts<br>(.joblib)"]
     end
@@ -239,12 +239,8 @@ python backend/training/predict.py
 
 ### 5. Training (`train.py`)
 - StandardScaler for feature scaling (fitted exclusively on `X_train`)
-- GridSearchCV with 5-fold cross-validation
-- Models trained with `class_weight='balanced'` to offset the 80/20 churn imbalance:
-  - SVM (tuned C and kernel)
-  - Random Forest (tuned n_estimators)
-  - Logistic Regression (tuned C)
-  - Decision Tree (tuned criterion)
+- Instant instantiation of the optimal **Decision Tree Classifier** with `criterion='entropy'`
+- Model trained with `class_weight='balanced'` to mathematically offset the 80/20 churn imbalance without requiring memory-heavy synthetic oversampling
 - Model persistence with joblib
 
 ### 6. Evaluation (`evaluate.py`)
@@ -260,16 +256,13 @@ python backend/training/predict.py
 
 ## Results
 
-### GridSearchCV Model Comparison (5-Fold CV)
+### Optimized Model Architecture
 
-*(Note: CV scores reflect the model's ability to balance accuracy while strictly penalizing false negatives via class weights).*
+*(Note: These metrics reflect the model's ability to balance accuracy while strictly penalizing false negatives via class weights).*
 
 | Model | Best Hyperparameters |
 |-------|---|
 | **Decision Tree** 🏆 | `criterion: entropy, class_weight: balanced` |
-| Random Forest | `n_estimators: 90, class_weight: balanced` |
-| SVM | `C: 20, kernel: rbf, class_weight: balanced` |
-| Logistic Regression | `C: 5, class_weight: balanced` |
 
 ### Best Model: Decision Tree (Entropy, Balanced)
 
